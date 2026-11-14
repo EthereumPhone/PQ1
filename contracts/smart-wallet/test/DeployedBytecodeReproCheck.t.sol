@@ -4,7 +4,7 @@ pragma solidity 0.8.28;
 import {Test} from "forge-std/Test.sol";
 import {PQSmartWallet} from "../src/PQSmartWallet.sol";
 import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
-import {SPHINCsC10Asm} from "../src/verifiers/SPHINCsC10Asm.sol";
+import {RefSPHINCsC10Asm} from "./ref/RefSPHINCsC10Asm.sol";
 import {ISPHINCSVerifier} from "../src/verifiers/ISPHINCSVerifier.sol";
 import {IEntryPoint} from "account-abstraction/legacy/v06/IEntryPoint06.sol";
 import {LibClone} from "solady/utils/LibClone.sol";
@@ -26,14 +26,21 @@ import {PqsignerDeployment} from "../script/generated/PqsignerDeployment.sol";
 ///         caught the 2026-05 Ethereum-mainnet divergence
 ///         (docs/VULN-eth-mainnet-deployment-divergence.md).
 ///
-///         STATUS 2026-10-20 (Trail of Bits audit freeze): the EXPECTED_*
-///         values below are the freeze set, computed deterministically and
-///         NOT yet deployed on any chain. The previous set (2026-06-12, Base
-///         Mainnet: impl 0x31e4…3590, factory 0xe8CE…d452, verifier
-///         0xdDE4…9cbB) is superseded; see deployments/base-mainnet.json.
-///         After deploying, `cast codehash <addr>` on the chain must equal
-///         these values (the impl hash only on chain 8453: it embeds the
-///         chain id in Solady's EIP-712 cache).
+///         STATUS: the EXPECTED_* values below are the 2026-10-20 Trail of
+///         Bits audit-freeze set, DEPLOYED on Base Mainnet on 2026-10-21
+///         (deployments/base-mainnet.json, status "active"); `cast codehash
+///         <addr>` on Base equals these values (the impl hash only on chain
+///         8453: it embeds the chain id in Solady's EIP-712 cache). The
+///         previous set (2026-06-12: impl 0x31e4…3590, factory 0xe8CE…d452,
+///         verifier 0xdDE4…9cbB) is superseded.
+///
+///         VERIFIER LEG (2026-11-14): `src/verifiers/SPHINCsC10Asm.sol` now
+///         holds the optimized v1, which is not deployed. What is on Base is
+///         the reference, so the verifier is replayed from its frozen copy
+///         `test/ref/RefSPHINCsC10Asm.sol` (it differs from the deployed
+///         source only in the contract name, which `bytecode_hash = "none"`
+///         keeps out of the creation and runtime code). The wallet and
+///         factory are still built from src/.
 ///
 ///         The replay is byte-exact because the lib set is exactly
 ///         `foundry.lock` (account-abstraction `f54584e` for the v0.6
@@ -52,7 +59,7 @@ contract DeployedBytecodeReproCheckTest is Test {
     uint256 constant BASE_CHAIN_ID = 8453;
     address constant ENTRY_POINT_V06 = 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789;
 
-    // The 2026-10-20 freeze set (deterministic; deploy pending).
+    // The 2026-10-20 freeze set (deployed on Base Mainnet 2026-10-21).
     address constant EXPECTED_VERIFIER = 0x7Ab9Abd09ef8A5D2ca06d9509BB295e637FA6aB4;
     address constant EXPECTED_IMPL = 0xEb64deaD5Ca0C433365EABC1AB6eBdeb28f53011;
 
@@ -91,7 +98,7 @@ contract DeployedBytecodeReproCheckTest is Test {
         vm.etch(ARACHNID, ARACHNID_RUNTIME);
 
         // (1) verifier — no immutables, address-independent.
-        address verifier = _create2(type(SPHINCsC10Asm).creationCode);
+        address verifier = _create2(type(RefSPHINCsC10Asm).creationCode);
         assertEq(verifier, EXPECTED_VERIFIER, "verifier address");
         assertEq(verifier.codehash, EXPECTED_VERIFIER_CODEHASH, "verifier codehash");
 

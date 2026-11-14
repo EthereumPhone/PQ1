@@ -1,5 +1,16 @@
 # Deployed-bytecode ↔ pinned-codehash: RESOLVED
 
+> **UPDATE 2026-11-14 — the verifier leg replays the frozen reference.**
+> `src/verifiers/SPHINCsC10Asm.sol` now holds the optimized v1, which is not deployed.
+> `DeployedBytecodeReproCheck.t.sol` therefore builds the verifier from
+> `test/ref/RefSPHINCsC10Asm.sol` (the deployed source up to the contract name). The live set
+> below is still reproduced exactly; the wallet and factory still build from `src/`.
+>
+> Residual: `script/ProductionDeploy.sol` deploys `src/` (the v1). Running it would therefore
+> not land at these addresses or at the firmware's CREATE2 constants, and this check no longer
+> catches that. Deploying the v1 is a deployment-time step (`PINNED_CODEHASHES.md`, UPDATE
+> 2026-11-14).
+
 > **UPDATE 2026-10-21 — deployed and compared; resolved again.** The freeze
 > set is live at the predicted addresses on Ethereum Mainnet (blocks
 > 26242705–07), Base Mainnet (52908513–15) and Base Sepolia (48422830/42/53),

@@ -52,15 +52,24 @@ contract SPHINCsC10AsmTest is Test {
     /// from the runtime code; the instructions are byte-identical.
     /// Any change here MUST be paired with a verifier source diff in
     /// the same commit + a justification in the commit message.
-    /// Default profile (runs=200) verifier runtime codehash.
+    /// RE-PINNED 2026-11-14 (0x8fa6… → 0x8b47…, deploy 0xfd55… → 0x3cb7…)
+    /// to what `src/verifiers/SPHINCsC10Asm.sol` builds to since the #1155
+    /// gas-track merges: the OPTIMIZED v1 (same interface and verdicts;
+    /// `RelFors.head_verdict_eq_full` proves it equal to the reference at
+    /// the Lean interpreter-model level). The source diff landed in the
+    /// research merges; this commit only catches the freeze test up, with
+    /// both values recomputed from the tree. The optimized v1 is NOT
+    /// deployed. The deployed reference (Base, 0xfd55…) stays pinned, built
+    /// from its frozen copy `test/ref/RefSPHINCsC10Asm.sol`, in
+    /// `PinnedCodehashSelector` / `PinnedCodehashes` and
+    /// `DeployedBytecodeReproCheck`.
+    /// Default profile (runs=200) verifier runtime codehash (src/, optimized v1).
     bytes32 internal constant EXPECTED_RUNTIME_CODEHASH =
-        0x8fa670d53df0fd63bc64505463f268256ffbb51e57f62d8a5a41f5bcec5cf2eb;
-    /// Deploy profile (runs=999999) verifier runtime codehash — the
-    /// production build the freeze-set verifier is deployed from (see
-    /// PINNED_CODEHASHES.md / DeployedBytecodeReproCheck). The 2026-06-12
-    /// Base Mainnet verifier at 0xdDE4D290… carries the older metadata hash.
+        0x8b475ebefbd9c91664df200d7834fc583f88edf1a72ac4fe9f005a0412533478;
+    /// Deploy profile (runs=999999) verifier runtime codehash (src/,
+    /// optimized v1; not deployed on any chain).
     bytes32 internal constant EXPECTED_RUNTIME_CODEHASH_DEPLOY =
-        0xfd55ec708737970f93a73cec1ce67de95391da4b673e24fa2516f9822bf92989;
+        0x3cb7ea23c7cd6c05c2fa31775316d9093ce392f1e48eb6d1f68a6eac473d4ddc;
 
     /// The expected verifier codehash for the active optimiser profile, so
     /// `forge test` is clean under BOTH `default` and `deploy`.

@@ -4,7 +4,10 @@ pragma solidity 0.8.28;
 import {SymTest} from "halmos-cheatcodes/SymTest.sol";
 import {Test} from "forge-std/Test.sol";
 
-import {SPHINCsC10Asm} from "../../src/verifiers/SPHINCsC10Asm.sol";
+// The deployed reference (Base, codehash 0xfd55…), from its frozen copy: since 2026-11-14
+// src/verifiers/SPHINCsC10Asm.sol holds the optimized v1, which is not deployed. A3.1 and this
+// discharge stay on the deployed bytecode; a run against the v1 is a deployment-time step.
+import {RefSPHINCsC10Asm} from "../ref/RefSPHINCsC10Asm.sol";
 
 /// @notice Halmos symbolic-execution rules for the **input-validation
 ///         gates** of the deployed SPHINCS+C10 verifier bytecode
@@ -28,10 +31,10 @@ contract HalmosVerifier is SymTest, Test {
     // N_MASK = top 16 bytes set, bottom 16 bytes zero.
     bytes32 internal constant NMASKED = bytes32(uint256(0x1234) << 240);
 
-    SPHINCsC10Asm internal v;
+    RefSPHINCsC10Asm internal v;
 
     function setUp() public {
-        v = new SPHINCsC10Asm();
+        v = new RefSPHINCsC10Asm();
     }
 
     /// **Wrong signature length reverts** ("Invalid sig length"). The check

@@ -1,5 +1,32 @@
 # Pinned bytecode codehashes
 
+> ## UPDATE 2026-11-14 — `src/` holds the optimized v1; the verifier pins stay on the deployed reference
+>
+> Since the #1155 gas-track merges, `contracts/smart-wallet/src/verifiers/SPHINCsC10Asm.sol` is the
+> **optimized v1**. It is not deployed. The deployed reference (Base Mainnet since 2026-10-21,
+> `deployments/base-mainnet.json`) is kept byte-for-byte, except the contract name, as
+> `contracts/smart-wallet/test/ref/RefSPHINCsC10Asm.sol`. `bytecode_hash = "none"` keeps the name
+> out of the bytecode.
+>
+> **The `SPHINCsC10Asm` values below are unchanged** (`0x8fa670d5…` / `0xfd55ec70…`). They are
+> what A3.1 and its Halmos / KAT / cross-validation evidence were taken on, so:
+> - `PinnedCodehashes.t.sol`, `test/halmos/HalmosVerifier.t.sol` and the verifier leg of
+>   `DeployedBytecodeReproCheck.t.sol` now build `RefSPHINCsC10Asm`;
+> - the wallet and factory legs still build from `src/`.
+>
+> **What `src/` builds to:** `0x8b475ebefbd9c91664df200d7834fc583f88edf1a72ac4fe9f005a0412533478`
+> (default) / `0x3cb7ea23c7cd6c05c2fa31775316d9093ce392f1e48eb6d1f68a6eac473d4ddc` (deploy).
+> - Pinned by `SPHINCsC10AsmTest.test_verifierBytecodeFrozen`.
+> - Its equality with the reference is proven at the Lean interpreter-model level
+>   (`RelFors.head_verdict_eq_full`; see `A3_1_VERIFIER_GAP.md`, UPDATE 2026-11-14).
+> - Its compile leg is covered by `research/c10-gas/gate.sh`'s differential vectors.
+>
+> **Re-pointing any deployed pin to the v1, or deploying it, is a deployment-time step.**
+> `script/ProductionDeploy.sol` still deploys `src/`, so running it would deploy the v1 at a new
+> address. That moves the wallet implementation and factory (they take the verifier address as
+> an immutable) and with them the firmware CREATE2 constants. `DeployedBytecodeReproCheck` no
+> longer sees that, because it replays the reference.
+
 > ## UPDATE 2026-10-20 — audit-freeze re-pin; nothing below is deployed yet
 >
 > The contracts were changed for the Trail of Bits audit freeze: owner removal

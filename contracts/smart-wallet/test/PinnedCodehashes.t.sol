@@ -5,7 +5,7 @@ import {Test, console2} from "forge-std/Test.sol";
 import {IEntryPoint} from "account-abstraction/legacy/v06/IEntryPoint06.sol";
 import {PQSmartWallet} from "../src/PQSmartWallet.sol";
 import {PQSmartWalletFactory} from "../src/PQSmartWalletFactory.sol";
-import {SPHINCsC10Asm} from "../src/verifiers/SPHINCsC10Asm.sol";
+import {RefSPHINCsC10Asm} from "./ref/RefSPHINCsC10Asm.sol";
 import {MockSPHINCSVerifier} from "./mocks/MockSPHINCSVerifier.sol";
 import {PinnedCodehashSelector} from "./PinnedCodehashSelector.sol";
 
@@ -73,13 +73,20 @@ contract PinnedCodehashesTest is PinnedCodehashSelector {
     // file's body unchanged.
     bytes32 constant PQ_MULTI_OWNABLE_CODEHASH = bytes32(0);  // embedded in PQSmartWallet; no independent deploy
 
-    SPHINCsC10Asm internal sphincs;
+    // VERIFIER LEG (2026-11-14): `src/verifiers/SPHINCsC10Asm.sol` now holds the optimized v1
+    // (not deployed). The verifier pin is the bytecode A3.1 (`solidityVerifier_compiles_correctly`)
+    // and its Halmos / cross-validation discharge were taken on, which is the Base-deployed
+    // reference; so this leg builds the reference's frozen copy `test/ref/RefSPHINCsC10Asm.sol`
+    // (it differs from the deployed source only in the contract name, which `bytecode_hash =
+    // "none"` keeps out of the bytecode). The optimized v1's own freeze pin is
+    // `SPHINCsC10AsmTest.test_verifierBytecodeFrozen`.
+    RefSPHINCsC10Asm internal sphincs;
     MockSPHINCSVerifier internal c10;
     PQSmartWallet internal impl;
     PQSmartWalletFactory internal factory;
 
     function setUp() public {
-        sphincs = new SPHINCsC10Asm();
+        sphincs = new RefSPHINCsC10Asm();
         c10 = new MockSPHINCSVerifier();
         impl = new PQSmartWallet(IEntryPoint(address(0x4337)), c10);
         factory = new PQSmartWalletFactory(address(impl), c10);
