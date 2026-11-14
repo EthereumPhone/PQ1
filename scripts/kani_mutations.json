@@ -228,10 +228,10 @@
       "crate": "pqsigner-aa",
       "harness": "parse_frame_panic_free_and_exact",
       "file": "aa/src/offchain_header.rs",
-      "find": "if p + trailer_len != payload.len() {",
-      "replace": "if p + trailer_len > payload.len() {",
+      "find": "|| p + set_len != payload.len() {",
+      "replace": "|| p + set_len > payload.len() {",
       "expect": "kani_fails",
-      "note": "weaken the EIP-712 typed-frame EXACT-consumption guard (`!=` -> `>`) so a payload with hidden trailing bytes after the trailer is accepted -> parse_frame_panic_free_and_exact's `trailer ends at payload.len()` assertion MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. Closes review finding (h): the offchain EIP712_TYPED/_V3 companion header parser had no host-Kani coverage; now extracted to pqsigner_aa::offchain_header (behaviour-identical, re-wired into cmd_sign_offchain.rs) + panic/OOB + exact-consumption harnesses.",
+      "note": "weaken the EIP-712 typed-frame EXACT-consumption guard (`!=` -> `>`) so a payload with hidden trailing bytes after the trailer is accepted -> parse_frame_panic_free_and_exact's `trailer ends at payload.len()` assertion MUST break. Verified 2026-07-02 by hand: mutation -> VERIFICATION:- FAILED; unmutated -> SUCCESSFUL. RETARGETED 2026-11-14: since CAP_ERC20_BUNDLE_SET the trailer may be followed by one optional erc20_set tail, so the exact-consumption guard is the tail's `p + set_len != payload.len()` (weakened to `>` -> hidden trailing bytes accepted -> the harness's `erc20_set ends at payload.len()` assertion MUST break). Closes review finding (h): the offchain EIP712_TYPED/_V3 companion header parser had no host-Kani coverage; now extracted to pqsigner_aa::offchain_header (behaviour-identical, re-wired into cmd_sign_offchain.rs) + panic/OOB + exact-consumption harnesses.",
       "harness_path": "offchain_header::verification::parse_frame_panic_free_and_exact"
     },
     {

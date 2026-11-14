@@ -30,6 +30,7 @@
     "tx-core/src/rlp.rs": 2,
     "tx/src/cowswap_order.rs": 8,
     "tx/src/erc20/calldata.rs": 5,
+    "tx/src/erc20/set.rs": 2,
     "tx/src/multisend.rs": 16,
     "tx/src/permit2.rs": 4,
     "tx/src/safe_mgmt.rs": 7,
@@ -235,6 +236,10 @@
       "parse_erc20_approve_no_misdecode",
       "parse_erc20_only_accepts_canonical"
     ],
+    "tx/src/erc20/set.rs": [
+      "envelope_parser_is_total_and_exact",
+      "lookup_is_exact"
+    ],
     "tx/src/multisend.rs": [
       "decode_multisend_canonical_acceptance",
       "decode_multisend_accepts_canonical",
@@ -296,12 +301,12 @@
     ]
   },
   "totals": {
-    "total_files": 33,
-    "total_harnesses": 191,
+    "total_files": 34,
+    "total_harnesses": 193,
     "mutation_enrolled_files": 23,
     "harnesses_in_enrolled_files": 173,
-    "files_outside_mutation": 10,
-    "harnesses_outside_mutation": 18,
+    "files_outside_mutation": 11,
+    "harnesses_outside_mutation": 20,
     "mutation_groups_total": 52,
     "mutation_groups_by_tier": {
       "quick": 12,
@@ -321,6 +326,7 @@
     "pqsigner-erc7730/src/render/visibility.rs",
     "pqsigner-ui-px/src/driver.rs",
     "pqsigner-ui-px/src/fit.rs",
-    "pqsigner-ui-px/src/screen.rs"
+    "pqsigner-ui-px/src/screen.rs",
+    "tx/src/erc20/set.rs"
   ]
 }

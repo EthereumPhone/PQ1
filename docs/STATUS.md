@@ -28,6 +28,10 @@ The source census is now 191 Kani harnesses across 33 files: 173 across 23
 mutation-enrolled files and 18 across ten files outside that manifest. The new
 research harness has its two separate source controls; it is not enrolled in
 the default firmware mutation runner.
+**UPDATE 2026-11-14:** 193 harnesses across 34 files (20 across 11 files outside
+the mutation manifest): `tx/src/erc20/set.rs` adds two ERC-20 bundle-set
+harnesses (envelope parser exact consumption, `lookup_exact` key exactness),
+written but not run and not mutation-enrolled.
 
 **Original SHA-256 complete-block correspondence (2026-10-28):** an isolated
 source-bound experimental extraction now proves the original portable byte

@@ -84,7 +84,7 @@ class NoLookalikeFolding(unittest.TestCase):
     def test_zero_width_not_silently_removed(self):
         # A zero-width space inside a ticker is an impersonation trick; it is
         # not a control character, so the row is dropped rather than folded.
-        self.assertIsNone(t.clean_symbol("US​DT"))
+        self.assertIsNone(t.clean_symbol("US\u200bDT"))
 
 
 class Whitespace(unittest.TestCase):
