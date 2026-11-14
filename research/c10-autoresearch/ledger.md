@@ -2038,3 +2038,53 @@ All cycle and gas figures come from the model calibrated at one point (stock); n
 - **Not done:** Rust and kit timing, for the same reasons as §3.
 
 **(d) applies to w4l65 as well [computed].** With identical seeds, w4l65's WOTS PRF output for ci = 0 equals draft 0.3's and w4's, because ci = 0 packs identically; for ci ≥ 1 it differs. FORS secrets and the R-candidate PRF are shared with every v2 variant. Gate (d) must therefore bind the complete parameter and encoding variant into both derivation branches before any w4-family key signs. Astra's review of these two commits follows in §2c.
+
+### 2c. Astra's review of §2b, and the strict per-term frontier (amends §2b; its table is kept as first written)
+
+Astra (`b4d46ed10`): **"FIX reporting; conditional MODEL-PASS for w4l65/T125."** Its checks:
+- The closure covers every printed frontier.
+- A7 with ci at bits 23..17 is disjoint, and ci = 64 sets bit 23, below kp.
+- No l ≤ 64 assumption remains in the Python verify, FORS, tree, digit or near-miss paths.
+- The KATs regenerate exactly.
+- The w4l65 numbers reproduce: 4,712 B; 75.73 / 72.33 M; 161,825.84 gas (86,457.84 callee + 75,368 calldata); (c) +0.702 b.
+
+Its three findings, all fixed or corrected here:
+
+1. **PASS hid term regressions (MEDIUM).** 142 of 173 PASS frontier rows worsened at least one bound term while the totals improved. For example, h18 d3 a11 k13 w8 l43 T208 has totals ×0.31 but encoding ×4.3, zero and prefix ×1.32, and wrapper node ×1.93.
+   - **Fix (`8d5a8443d`):** the mark now takes every returned term (node, zero, encoding, wots, fors, coverage, prefix) of both games at C = 1, 2 and 16.
+   - **New marks:** PASS 2,307, MINOR-LOSS 14,785, FAIL 2,314,637.
+   - These are bound-component regressions, not demonstrated attacks. Under a totals-only reading of gate (a), §2b's marks apply instead.
+   - For w4l65 T125 and w4 l64 T124, Astra computed every term at C = 1, 2, 16: **no term is worse than stock's.**
+2. **(c) uncertainty was overstated (MEDIUM).** One seed does not couple different l, because the second vector's stream shifts. The SE of the difference is about √(se² + se_stock²) ≈ 0.107.
+   - **T125:** paired bootstrap SE 0.104, 95% interval [+0.47, +0.89], about **6.7 SE**, not 9.
+   - **T124:** +0.13, interval [−0.10, +0.33], so its PASS on (c) is not established.
+   - The output now prints the delta SE, and the TSV has `c_delta_se_bits`.
+3. **Cross-format sharing is wider than §2b said (MEDIUM) [computed, confirmed].** w4l65's ci = 2j packs like 0.3's (and w4's) ci = j, for j = 0..32. That gives **33 shared WOTS secrets and 33 shared chain tweaks** per key against both formats, not only ci = 0. FORS secrets and the R candidates are identical too; prf2 and split810 change the sharing map. Gate (d) stands: a complete format identifier must be bound into both the bootstrap and slot derivation branches, account variants included, before any operational signature. Different roots and mutual signature rejection do not establish key separation.
+
+**Strict per-term frontier [computed, `8d5a8443d`].**
+- The PASS frontier is **stock plus w4, l = 65 shapes only**; no d ≥ 3 set passes.
+- Stock is still not weakly dominated by any PASS set.
+- Rows at T125 (robust on (c)); the cheaper T124 members are not established on (c):
+
+| set (every-term marks) | cached M (brief / share) | sig B | verify gas | (c) Δ b ± SE(Δ) | EC ord ratio | mark |
+|---|---:|---:|---:|---:|---:|---|
+| stock / v2 0.3 | 102.6 / 100.9 | 4,008 | 164,704 | 0 | 1 | PASS |
+| **w4l65: h18 d2 a11 k13 w4 l65 T125** | **75.7 / 72.3** | 4,712 | 161,826 | +0.70 ± 0.11 | 0.659 | **PASS** |
+| h18 d2 a10 k16 w4 l65 T125 | 68.8 / 65.4 | 5,048 | 173,032 | +0.70 ± 0.11 | 0.386 | PASS |
+| h18 d2 a9 k19 w4 l65 T125 | 64.4 / 61.0 | 5,288 | 181,051 | +0.70 ± 0.11 | 0.226 | PASS |
+| h16 d2 a11 k18 w4 l65 T125 | 56.0 / 52.5 | 5,640 | 192,766 | +0.70 ± 0.11 | 0.159 | PASS |
+| h16 d2 a10 k22 w4 l65 T125 | 46.6 / 43.1 | 6,072 | 207,182 | +0.70 ± 0.11 | 0.083 | PASS |
+| w4 (l64 T124) | 75.3 / 71.9 | 4,680 | 160,182 | +0.44 ± 0.11 | 0.651 | MINOR-LOSS 1.00 [enc] |
+| h18 d2 a10 k16 w8 l43 T205 | 95.6 / 93.9 | 4,344 | 175,910 | 0 | 0.622 | MINOR-LOSS 0.08 [wrapper node, C = 16] |
+| h16 d2 a11 k18 w8 l43 T205 | 75.2 / 73.5 | 4,936 | 195,644 | 0 | 0.218 | MINOR-LOSS 0.21 [wrapper node, C = 16] |
+| h18 d3 a8 k24 w4 l65 T124 | 20.3 / 16.6 | 6,764 | 233,322 | +0.13 ± 0.12 | 0.035 | MINOR-LOSS 0.40 [ordinary zero, C = 16] |
+| h18 d3 a11 k13 w8 l46 T209, h20 d4 a8 k18 w8 l47 T211 | | | | | | FAIL (off every frontier) |
+
+**Status of w4l65 against gate (S):**
+- (a) model PASS under every-term marks, but a d = 2, w = 4 port of the EasyCrypt proof and its quantum statement are required;
+- (b) as v2;
+- (c) fault margin +0.70 ± 0.11 b, DPA as v2 (UNKNOWN);
+- (d) FAIL until the format identifier lands;
+- (e) numerics reproduced by Astra; no proof replay, Rust, kit timing or physical validation.
+
+The cycle and gas figures are the calibrated model only.
