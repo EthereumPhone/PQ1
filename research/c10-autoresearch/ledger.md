@@ -2153,3 +2153,23 @@ The cycle and gas figures are the calibrated model only.
 - v1, the product sphincs-c10, the hw driver and the FSBL are untouched by construction and were not re-run.
 - The extraction-freshness gate is green. The default `format_options_numerics.py` output is byte-identical.
 - The kit was flash-only, and the option bytes are unchanged.
+
+### 2e. Astra's third pass (amends §2d; §2d is kept as written)
+
+Astra (`69853a8a4`): **"FIX — benchmark-runner reliability; numerics and the tested generic w4l65 path check out."**
+- **Reproduced:** the full 2,331,729-set search regenerated every committed TSV data row in memory. PASS 2,307 / 25,887 with the stated d and l splits; all stock denominators positive; 59,136 scalar-against-vector term comparisons passed.
+- **Mark definitions:** `mark` covers all seven terms, both games and all three caps; `mark_totals` uses exactly the six totals plus the same eight bit metrics. The closure and the +0.702 ± 0.107 b delta reproduce.
+- **The copied variant:** it matches the parameters, A7 layout, 130-bit extraction, buffers and shuffle capacity, and no live generic-path assumption of l ≤ 64 or w = 8 was found.
+- **The product crate:** its diff is empty, and freshness reports 35 fresh, 0 drifted.
+
+Fixed in `0718898be`:
+- **MEDIUM:** `run_kit.sh` could print success after a failed runner (it re-read the previous log) or a failed evaluator. It now stops non-zero on either and keeps each repetition's log.
+  - Missing ELF: the runner returns rc 4 and the script exits 1.
+  - Evaluator against a wrong golden, and against signatures truncated to 4,008 B: exit 1.
+  - The missing-ELF control overwrote session 2's `d03-1` log. Its result is kept in the JSONL.
+- **LOW:** the copy's `sim_internals::find_count` still returned `[u8; 43]`; it now returns `[u8; L]`, and the `sim-internals` combination compiles.
+- **Kit re-run with the fixed runner** (session 2; all 13 runs in `proto_w4l65/kit-runs-2026-11-14.jsonl`): sign ×0.8787, keygen ×0.8485, verify ×0.9723. Ranges are ≤ 225 cycles, and session 1 is reproduced to within about 200 cycles. The option bytes are identical to the baseline after each session.
+
+Ledger corrections to §2d:
+- **The "totals ratio" column of the d ≥ 3 table** mixed C = 16 term and game sizes with C = 1 ordinary-total ratios. At C = 16 the wrapper totals ratios are **0.3367, 0.1550 and 0.3238**, against 0.325, 0.156 and 0.311 for the C = 1 ordinary totals.
+- **The cycles-per-call explanation is a hypothesis, not a measurement.** §2d says the rise from 388 to 454 happens *because* of per-chain glue and the 17-block T_65. Those effects are real, but the digit-sum implementation and the operation mix also change. Attributing the gap needs a profile of the copy, for example the round-13 PC-sampling bench.
