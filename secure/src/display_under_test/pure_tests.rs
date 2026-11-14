@@ -23,7 +23,7 @@ use super::primitives::{
     write_eth_two_rows, write_fee_budget_row, write_gas, write_gwei, write_line,
     write_native_amount_two_rows, write_native_currency_row, write_native_fee_budget_row,
     write_nonce_row, write_selector_row, write_tip_row, write_token_amount_two_rows,
-    write_token_name, AmountFit,
+    write_token_amount_rows, write_token_name, AmountFit, AmountRows,
 };
 use super::{Pages, MAX_PAGES};
 
@@ -508,7 +508,7 @@ fn legacy_token_adjacent_low_digits_render_exactly_without_collision() {
         let amount = u256_from_u64(raw);
         let mut r1 = [b' '; DISPLAY_COLS];
         let mut r2 = [b' '; DISPLAY_COLS];
-        assert!(token_amount_is_exactly_renderable(&amount, &meta));
+        assert!(token_amount_is_exactly_renderable(&amount, &meta, AmountRows::Two));
         assert_eq!(
             write_token_amount_two_rows(&mut r1, &mut r2, &amount, &meta),
             AmountFit::Full
@@ -550,7 +550,7 @@ fn legacy_token_full_precision_18_decimals_wraps_exactly() {
         let amount = u256_dec(raw);
         let mut r1 = [b' '; DISPLAY_COLS];
         let mut r2 = [b' '; DISPLAY_COLS];
-        assert!(token_amount_is_exactly_renderable(&amount, &meta), "{raw}");
+        assert!(token_amount_is_exactly_renderable(&amount, &meta, AmountRows::Two), "{raw}");
         assert_eq!(
             write_token_amount_two_rows(&mut r1, &mut r2, &amount, &meta),
             AmountFit::Full
@@ -563,7 +563,7 @@ fn legacy_token_full_precision_18_decimals_wraps_exactly() {
     let amount = u256_dec("10000000987654321098765432");
     let mut r1 = [b' '; DISPLAY_COLS];
     let mut r2 = [b' '; DISPLAY_COLS];
-    assert!(!token_amount_is_exactly_renderable(&amount, &meta));
+    assert!(!token_amount_is_exactly_renderable(&amount, &meta, AmountRows::Two));
     assert_eq!(
         write_token_amount_two_rows(&mut r1, &mut r2, &amount, &meta),
         AmountFit::Overflow
@@ -575,6 +575,52 @@ fn legacy_token_full_precision_18_decimals_wraps_exactly() {
         AmountFit::Full
     );
     assert_eq!(row_str(&r1), "9.987654321 DAI");
+}
+
+/// An amount page whose last row only carried `> next` gives the amount a
+/// third wrapped row when two do not hold every digit: ten million DAI at
+/// full precision, and a long symbol that two rows only fit as base units.
+/// Nothing is rounded; `> next` stays when two rows suffice.
+#[test]
+fn legacy_token_third_row_holds_what_two_rows_cannot() {
+    fn u256_dec(s: &str) -> U256 {
+        let mut v = [0u8; 32];
+        for c in s.bytes() {
+            let mut carry = u32::from(c - b'0');
+            for b in v.iter_mut().rev() {
+                let x = u32::from(*b) * 10 + carry;
+                *b = (x & 0xff) as u8;
+                carry = x >> 8;
+            }
+        }
+        U256(v)
+    }
+    fn meta(symbol: &'static [u8]) -> Erc20Metadata<'static> {
+        Erc20Metadata { chain_id: 8453, contract: [0x50; 20], decimals: 18, name: b"Token", symbol }
+    }
+    for (raw, symbol, e1, e2, e3) in [
+        ("10000000987654321098765432", &b"DAI"[..], "10000000.987654>", ">32109876543>", ">2 DAI"),
+        ("123456789012345678901234567890", b"SHIB", "123456789012.34>", ">56789012345678>", ">9 SHIB"),
+        ("4423644323452363", b"ABCDEFGHIJ", "0.0044236443234>", ">5236>", ">3 ABCDEFGHIJ"),
+        ("9987654321000000000", b"DAI", "9.987654321 DAI", "", "> next"),
+    ] {
+        let (m, amount) = (meta(symbol), u256_dec(raw));
+        let (mut r1, mut r2, mut r3) = ([b' '; DISPLAY_COLS], [b' '; DISPLAY_COLS], [b' '; DISPLAY_COLS]);
+        assert!(token_amount_is_exactly_renderable(&amount, &m, AmountRows::Three), "{raw}");
+        assert_eq!(write_token_amount_rows(&mut r1, &mut r2, &mut r3, &amount, &m), AmountFit::Full, "{raw}");
+        assert_eq!([row_str(&r1), row_str(&r2), row_str(&r3)], [e1, e2, e3], "{raw}");
+    }
+    // Two rows still refuse ten million DAI at full precision.
+    assert!(!token_amount_is_exactly_renderable(
+        &u256_dec("10000000987654321098765432"),
+        &meta(b"DAI"),
+        AmountRows::Two
+    ));
+    // Beyond three rows: refused (rows blanked), never cut.
+    let amount = u256_dec("123456789012345678901234567890123456789012345678901234567890");
+    let (mut r1, mut r2, mut r3) = ([b' '; DISPLAY_COLS], [b' '; DISPLAY_COLS], [b' '; DISPLAY_COLS]);
+    assert_eq!(write_token_amount_rows(&mut r1, &mut r2, &mut r3, &amount, &meta(b"DAI")), AmountFit::Overflow);
+    assert_eq!([row_str(&r1), row_str(&r2), row_str(&r3)], ["", "", ""]);
 }
 
 /// Full-precision 18-decimal amounts under 10^16 base units used to fit the
@@ -595,7 +641,7 @@ fn legacy_token_small_full_precision_wraps_before_base_units() {
         let amount = u256_from_u64(raw);
         let mut r1 = [b' '; DISPLAY_COLS];
         let mut r2 = [b' '; DISPLAY_COLS];
-        assert!(token_amount_is_exactly_renderable(&amount, &m), "{raw}");
+        assert!(token_amount_is_exactly_renderable(&amount, &m, AmountRows::Two), "{raw}");
         assert_eq!(write_token_amount_two_rows(&mut r1, &mut r2, &amount, &m), AmountFit::Full);
         assert_eq!(row_str(&r1), e1, "{raw}");
         assert_eq!(row_str(&r2), e2, "{raw}");
@@ -635,7 +681,7 @@ fn legacy_token_base_unit_fallback_never_truncates_symbol() {
     let mut r1 = [b' '; DISPLAY_COLS];
     let mut r2 = [b' '; DISPLAY_COLS];
 
-    assert!(!token_amount_is_exactly_renderable(&amount, &meta));
+    assert!(!token_amount_is_exactly_renderable(&amount, &meta, AmountRows::Two));
     assert_eq!(
         write_token_amount_two_rows(&mut r1, &mut r2, &amount, &meta),
         AmountFit::Overflow
@@ -2429,12 +2475,22 @@ fn legacy_fee_budget_exact_fit_boundary_refuses_rounding() {
         exact_gas
     ));
     assert_eq!(row_str(&row), "!OVF");
-    assert!(!legacy_fee_rows_are_exactly_renderable(
+    // The envelope no longer refuses it (2026-11-14): the worst case takes
+    // two rows as the exact decimal, never rounded.
+    assert!(legacy_fee_rows_are_exactly_renderable(
         &too_wide_fee,
         &one_wei,
         exact_gas,
         1,
     ));
+    let pages = build_legacy_fee_pages(&too_wide_fee, &one_wei, exact_gas, 1);
+    assert!(pages.exact, "{:?}", pages.pages.iter().flatten().map(row_str).collect::<Vec<_>>());
+    let worst: Vec<String> = pages.pages[1].iter().map(row_str).collect();
+    assert_eq!(worst, ["Worst-case:", "0.0000010009999>", ">98999 ETH", "(gas: 999999999)"]);
+    // Refused only when no exact form fits at all.
+    let mut huge_fee = U256::default();
+    huge_fee.0[16..].copy_from_slice(&10u128.pow(30).to_be_bytes());
+    assert!(!legacy_fee_rows_are_exactly_renderable(&huge_fee, &one_wei, exact_gas, 1));
 }
 
 #[test]

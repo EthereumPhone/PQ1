@@ -989,17 +989,18 @@ fn wysiwys_erc20_known_unrenderable_amount_refuses_before_pages_escape() {
     let token = [0xAA; 20];
     let recipient = [0xB7; 20];
     let amount_word = be_u256_from_u64(10_000_000_000_000_001);
-    // An 11-byte symbol leaves too little of row 2 for even the wrapped
-    // exact form (`10.00000000000000>` / `>0001 ABCDEFGHIJK` = 18 cols).
+    // A 14-byte symbol leaves too little of the last row for even the
+    // three-row exact wrap (`>1 ABCDEFGHIJKLMN` = 17 cols), and `base ` +
+    // symbol exceeds a row.
     let meta = Erc20Metadata {
         chain_id: 8453,
         contract: token,
         decimals: 18,
         name: b"Token",
-        symbol: b"ABCDEFGHIJK",
+        symbol: b"ABCDEFGHIJKLMN",
     };
     assert!(
-        !super::primitives::token_amount_is_exactly_renderable(&U256(amount_word), &meta),
+        !super::primitives::token_amount_is_exactly_renderable(&U256(amount_word), &meta, super::primitives::AmountRows::Three),
         "fixture must exceed the exact scaled, labelled base-unit and wrapped widths"
     );
 
@@ -1051,7 +1052,7 @@ fn wysiwys_erc20_known_unlimited_approve_remains_allowed() {
         amount_word
     )));
     assert!(
-        !super::primitives::token_amount_is_exactly_renderable(&U256(amount_word), &meta),
+        !super::primitives::token_amount_is_exactly_renderable(&U256(amount_word), &meta, super::primitives::AmountRows::Three),
         "the test must exercise the explicit unlimited-approve semantic path"
     );
 

@@ -12,6 +12,7 @@
 //! — the hero caption carries it only when it renders there exactly.
 
 use super::primitives::{known_native_ticker, native_ticker};
+use super::primitives::AmountRows;
 use super::screen_kit::{caption_fits, native_amount, BodyReceipt, Emit, Text};
 use super::userop_screens::{emit_fee_and_details, Family};
 use crate::names::NameResolver;
@@ -55,7 +56,7 @@ pub(crate) fn family(tx: &Eip1559Tx) -> Family {
 
 pub(crate) fn emit(out: &mut Screens, tx: &Eip1559Tx, resolver: &NameResolver<'_>, fam: Family) -> Result<BodyReceipt, ()> {
     let mut e = Emit::new(out, tx.chain_id, fam.look);
-    let amt = native_amount(&tx.value, tx.chain_id).ok_or(())?;
+    let amt = native_amount(&tx.value, tx.chain_id, AmountRows::Three).ok_or(())?;
 
     // ── Hero ────────────────────────────────────────────────────────
     if tx.value.is_zero() {

@@ -1226,7 +1226,9 @@ fn se050_probe_readonly_names_no_write_path() {
 /// `amount_form_policy_tests`), and `secure/src/tx/display/screen_kit.rs` only
 /// adapts those forms for the pixel screens. A base-unit label anywhere else in
 /// display code is a second policy that the corpus test does not cover — route
-/// it through the shared form instead.
+/// it through the shared form instead. Each decision takes the page's row
+/// capacity (`AmountRows`), so a page and its pixel screen ask the same
+/// question.
 #[test]
 fn amount_base_unit_labels_live_only_in_the_shared_policy() {
     const ALLOWED: [&str; 2] = [
@@ -1285,7 +1287,8 @@ fn amount_base_unit_labels_live_only_in_the_shared_policy() {
     );
     let pixel = code_only(&read_workspace_file(ALLOWED[1]));
     assert!(
-        pixel.contains("match token_amount_form(value, meta)?") && pixel.contains("match native_amount_form(value, chain_id)?"),
+        pixel.contains("match token_amount_form(value, meta, rows)?")
+            && pixel.contains("match native_amount_form(value, chain_id, rows)?"),
         "pixel amounts must take their form from the shared policy, not decide it"
     );
 }

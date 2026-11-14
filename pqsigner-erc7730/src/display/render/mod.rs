@@ -40,7 +40,7 @@ pub use calldata_nested::{
 
 use super::primitives::{
     format_u64, hex_nibble, known_native_ticker, write_array_item_row, write_chain, write_line,
-    write_native_amount_two_rows, write_native_currency_row, AmountFit,
+    native_amount_is_exactly_renderable, write_native_currency_row, AmountRows,
 };
 use crate::bundle::VerifiedDescriptor;
 use crate::proof_set::VerifiedProofSet;
@@ -2143,14 +2143,12 @@ fn append_envelope_pages(pages: &mut Pages, tx: &Eip1559Tx) -> Result<(), Render
 
     if known_native_ticker(tx.chain_id).is_none() && !tx.value.is_zero() {
         // The dispatcher splices one mandatory native-value page around this
-        // ERC-7730 render. Prove here that its two value rows can paint the
-        // unknown-chain integer exactly; its loud overflow marker is not an
-        // acceptable substitute for binding a signed value to the screen.
-        let mut raw_hi = [b' '; super::DISPLAY_COLS];
-        let mut raw_lo = [b' '; super::DISPLAY_COLS];
-        if write_native_amount_two_rows(&mut raw_hi, &mut raw_lo, &tx.value, tx.chain_id)
-            != AmountFit::Full
-        {
+        // ERC-7730 render. Prove here, with the same row budget that page has
+        // (`value_page::build_native_value_page`: three rows), that it can
+        // paint the unknown-chain integer exactly; its loud overflow marker
+        // is not an acceptable substitute for binding a signed value to the
+        // screen.
+        if !native_amount_is_exactly_renderable(&tx.value, tx.chain_id, AmountRows::Three) {
             return Err(RenderErr::Reject("7730 raw native value too wide"));
         }
     }
@@ -2770,14 +2768,17 @@ mod unknown_chain_fee_tests {
         let raw = 123_456_789_012u128 * 1_000_000_000;
         let mut tx = unknown_fee_tx(raw, 0, 21_000);
         tx.chain_id = 1;
+        // Until 2026-11-14 the legacy envelope refused this fee (its one
+        // "max / tip" row is too narrow); it now falls back to the same
+        // labelled full-row layout, so both painters render it.
         assert!(
-            !crate::display::primitives::legacy_fee_rows_are_exactly_renderable(
+            crate::display::primitives::legacy_fee_rows_are_exactly_renderable(
                 &tx.max_fee_per_gas,
                 &tx.max_priority_fee_per_gas,
                 tx.gas_limit,
                 tx.chain_id,
             ),
-            "fixture must exceed the compact legacy max-fee row"
+            "the legacy envelope falls back to labelled full rows"
         );
 
         let mut pages = Pages::with_len(0);

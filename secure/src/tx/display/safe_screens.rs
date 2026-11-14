@@ -21,7 +21,7 @@
 //! zero-collapse guard), so a value the legacy path renders exactly is
 //! rendered exactly here — and the same base-unit fallbacks apply.
 
-use super::primitives::native_ticker;
+use super::primitives::{native_ticker, AmountRows};
 use super::screen_kit::{
     addr42, chain_line, native_amount, native_derived_amount, raw_units, token_amount, BodyReceipt, Emit, Text,
 };
@@ -38,7 +38,7 @@ use crate::tx::eip712::cowswap::VerifiedCowswapV3;
 use crate::tx::eip712::keccak;
 use crate::tx::eip712::safe::multi_send::{self, MsRecordIter};
 use crate::tx::eip712::safe::{decode_canonical, SafeTx, VerifiedSafeExec, VerifiedSafeV1};
-use pqsigner_ui_px::fit::{fit_tier, layout_address, layout_amount, layout_amount_or_wrap, Region};
+use pqsigner_ui_px::fit::{fit_tier, layout_address, layout_amount_or_wrap, Region};
 use pqsigner_ui_px::{Icon, Look, ScreenBuilder, Screens, Side, Weight};
 use sphincs_tz_shared::GPV2_VAULT_RELAYER_ADDRESS;
 
@@ -308,31 +308,26 @@ fn emit_inner(
             let amt = if input.gas_token.iter().all(|&b| b == 0) {
                 native_derived_amount(&worst, input.chain_id)
             } else if let Some(m) = erc20.filter(|m| m.contract == input.gas_token) {
-                token_amount(&worst, m.decimals, m.symbol)
+                token_amount(&worst, m.decimals, m.symbol, AmountRows::Two)
             } else {
                 raw_units(&worst)
             }
             .ok_or(())?;
             let lay = layout_amount_or_wrap(amt.digits(), amt.unit(), Region::Docked).map_err(|_| ())?;
             let disclosure: &[u8] = b"at 30M gas est";
-            if lay.n == 1 {
-                e.detail(
-                    b"REFUNDMX",
-                    b"REFUND MAX",
-                    &[(lay.lines[0].as_bytes(), Weight::Regular), (disclosure, Weight::Regular)],
-                    true,
-                )?;
+            let shown = lay.as_slice();
+            let mut lines: [(&[u8], Weight); 4] = [(b"", Weight::Regular); 4];
+            for (slot, l) in lines.iter_mut().zip(shown) {
+                *slot = (l.as_bytes(), Weight::Regular);
+            }
+            if shown.len() < 3 {
+                // Amount and disclosure on one page.
+                lines[shown.len()] = (disclosure, Weight::Regular);
+                e.detail(b"REFUNDMX", b"REFUND MAX", &lines[..=shown.len()], true)?;
             } else {
-                e.detail(
-                    b"REFUNDMX",
-                    b"REFUND MAX",
-                    &[
-                        (lay.lines[0].as_bytes(), Weight::Regular),
-                        (lay.lines[1].as_bytes(), Weight::Regular),
-                        (disclosure, Weight::Regular),
-                    ],
-                    true,
-                )?;
+                // A three-line amount fills its page; the disclosure turns
+                // to the next one (never a dropped line).
+                e.detail_two_pages(b"REFUNDMX", b"REFUND MAX", &lines[..3], &[(disclosure, Weight::Regular)], true)?;
             }
         }
         if input.refund_receiver.iter().all(|&b| b == 0) {
@@ -349,7 +344,7 @@ fn emit_inner(
 
     // ── Inner ETH the Safe forwards (non-inline kinds) ──────────────
     if sem.show_inner_eth {
-        let amt = native_amount(&inner_value, input.chain_id).ok_or(())?;
+        let amt = native_amount(&inner_value, input.chain_id, AmountRows::Three).ok_or(())?;
         e.amount(b"SAFEVAL", b"SAFE VALUE", &amt, false)?;
     }
 
@@ -416,7 +411,7 @@ fn emit_multisend<'a>(
         expected += 1;
         let value = U256(sem.rec.value);
         if sem.needs_value_page {
-            let amt = native_amount(&value, input.chain_id).ok_or(())?;
+            let amt = native_amount(&value, input.chain_id, AmountRows::Three).ok_or(())?;
             let id = Text::new().push(b"RECVAL").push_u64(idx as u64 + 1);
             e.amount(id.as_bytes(), b"REC VALUE", &amt, false)?;
             expected += 1;
@@ -452,7 +447,7 @@ fn emit_inner_kind(
         InnerKind::EmptyCall => e.addr(b"EMPTYCAL", b"EMPTY CALL", &ctx.to, resolver),
         InnerKind::PlainEth => {
             e.addr(b"TO", b"TO", &ctx.to, resolver)?;
-            let amt = native_amount(&ctx.value, e.chain_id).ok_or(())?;
+            let amt = native_amount(&ctx.value, e.chain_id, AmountRows::Three).ok_or(())?;
             e.amount(b"SEND", b"SEND", &amt, false)
         }
         InnerKind::Erc20Known(call) => {
@@ -560,7 +555,7 @@ fn emit_erc20(
             if unlimited {
                 e.detail(b"AMOUNT", verb, &[(b"unlimited", Weight::Regular)], false)?;
             } else {
-                let amt = token_amount(&amount, m.decimals, m.symbol).ok_or(())?;
+                let amt = token_amount(&amount, m.decimals, m.symbol, AmountRows::Three).ok_or(())?;
                 e.amount(b"AMOUNT", verb, &amt, false)?;
             }
         }
@@ -569,16 +564,12 @@ fn emit_erc20(
         }
         None => {
             let amt = raw_units(&amount).ok_or(())?;
-            let lay = layout_amount(amt.digits(), amt.unit(), Region::Full).map_err(|_| ())?;
-            if lay.n == 1 {
-                e.value(b"RAWAMT", b"RAW AMOUNT", &[(lay.lines[0].as_bytes(), Weight::Regular)])?;
-            } else {
-                e.value(
-                    b"RAWAMT",
-                    b"RAW AMOUNT",
-                    &[(lay.lines[0].as_bytes(), Weight::Regular), (lay.lines[1].as_bytes(), Weight::Regular)],
-                )?;
+            let lay = layout_amount_or_wrap(amt.digits(), amt.unit(), Region::Full).map_err(|_| ())?;
+            let mut lines: [(&[u8], Weight); 3] = [(b"", Weight::Regular); 3];
+            for (slot, l) in lines.iter_mut().zip(lay.as_slice()) {
+                *slot = (l.as_bytes(), Weight::Regular);
             }
+            e.value(b"RAWAMT", b"RAW AMOUNT", &lines[..usize::from(lay.n)])?;
         }
     }
 

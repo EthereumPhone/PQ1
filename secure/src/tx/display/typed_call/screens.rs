@@ -13,6 +13,7 @@
 //! 32 characters. A value the page could only show as `!OVERFLOW` refuses.
 
 use super::super::blind_sign_screens::{emit_function, emit_to, target_look};
+use super::super::primitives::AmountRows;
 use super::super::screen_kit::{native_amount, wrap, BodyReceipt, Emit};
 use super::super::userop_screens::{emit_fee_and_details, Family};
 use super::super::Pages;
@@ -145,7 +146,7 @@ pub(crate) fn emit(
     }
     emit_to(&mut e, tx, resolver)?;
     if !tx.value.is_zero() {
-        let amt = native_amount(&tx.value, tx.chain_id).ok_or(())?;
+        let amt = native_amount(&tx.value, tx.chain_id, AmountRows::Three).ok_or(())?;
         e.amount(b"VALUE", b"! VALUE", &amt, true)?;
     }
     emit_fee_and_details(&mut e, tx)?;

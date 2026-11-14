@@ -283,3 +283,6 @@ mod structured_screens_render_pure_tests;
 
 #[cfg(test)]
 mod wysiwys_dispatch_differential_tests;
+
+#[cfg(test)]
+mod amount_sweep_guard_tests;

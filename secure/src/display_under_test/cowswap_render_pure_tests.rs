@@ -158,9 +158,10 @@ fn exact_preflight_wraps_full_precision_value_exactly() {
 
 #[test]
 fn exact_preflight_refuses_value_too_wide_for_scaled_or_base_units() {
-    // 10^25 + 1 = 10000000.000000000000000001: its wrapped row 2 needs 18
-    // columns with a four-byte symbol, its raw base-unit form 26 digits.
-    let c = sell_canonical([0x33; 20], 10_000_000_000_000_000_000_000_001);
+    // 10^38 + 1 = 100000000000000000000.000000000000000001: 40 characters,
+    // beyond even the three-row wrap with a four-byte symbol; its raw
+    // base-unit form is 39 digits.
+    let c = sell_canonical([0x33; 20], 100_000_000_000_000_000_000_000_000_000_000_000_001);
     let sell = leg(b"DUST", 18);
 
     assert!(
@@ -278,8 +279,8 @@ fn positive_cowswap_golden_grid_hash() {
     );
 
     const GOLDEN: [u8; 32] = [
-        142, 85, 132, 133, 106, 125, 212, 52, 60, 225, 218, 75, 139, 0, 3, 193, 120, 121, 210, 134,
-        178, 254, 10, 88, 186, 141, 14, 183, 134, 47, 238, 228,
+        104, 93, 0, 102, 101, 236, 147, 219, 132, 129, 189, 80, 9, 70, 90, 181, 105, 148, 199, 8,
+        66, 14, 109, 219, 71, 65, 111, 54, 190, 35, 56, 175,
     ];
     assert_eq!(
         h, GOLDEN,

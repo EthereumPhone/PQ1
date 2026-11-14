@@ -5,12 +5,12 @@
 
 use super::primitives::{
     build_legacy_fee_pages, write_addr_full_or_name, write_chain, write_line, write_nonce_row,
+    write_raw_integer_rows, AmountFit,
 };
 use super::Pages;
 use crate::erc20::calldata::{is_unlimited_amount, Erc20Call};
 use crate::names::NameResolver;
 use crate::tx::eip1559::{Eip1559Tx, U256};
-use crate::ui::DISPLAY_COLS;
 
 pub fn render_erc20_unknown_pages(
     tx: &Eip1559Tx,
@@ -85,6 +85,7 @@ pub fn render_erc20_unknown_pages(
         Erc20Call::TransferFrom { amount, .. } => *amount,
         Erc20Call::Approve { amount, .. } => *amount,
     };
+    write_line(&mut pages.buf[p][3], "> next");
     if matches!(call, Erc20Call::Approve { .. }) && is_unlimited_amount(&amount) {
         write_line(&mut pages.buf[p][1], "unlimited");
     } else if matches!(call, Erc20Call::Approve { .. }) && amount.is_zero() {
@@ -96,22 +97,14 @@ pub fn render_erc20_unknown_pages(
         // reach it.
         write_line(&mut pages.buf[p][1], "Revoke approval");
     } else {
-        // Raw integer: emit as a 78-digit max decimal across rows 1+2.
-        let mut tmp = [0u8; 96];
-        match amount.format_decimal(0, 0, false, &mut tmp) {
-            Some(n) if n <= DISPLAY_COLS => {
-                pages.buf[p][1][..n].copy_from_slice(&tmp[..n]);
-            }
-            Some(n) if n <= 2 * DISPLAY_COLS => {
-                pages.buf[p][1].copy_from_slice(&tmp[..DISPLAY_COLS]);
-                pages.buf[p][2][..n - DISPLAY_COLS].copy_from_slice(&tmp[DISPLAY_COLS..n]);
-            }
-            _ => {
-                write_line(&mut pages.buf[p][1], "!OVERFLOW");
-            }
+        // Raw integer, every digit: one row, or wrapped with continuation
+        // marks over rows 1-3 (until 2026-11-14 it was cut at column 16
+        // with no mark, so row 2 read as a number of its own).
+        let [_lbl, r1, r2, r3] = &mut pages.buf[p];
+        if write_raw_integer_rows(r1, r2, r3, &amount) == AmountFit::Overflow {
+            write_line(r1, "!OVERFLOW");
         }
     }
-    write_line(&mut pages.buf[p][3], "> next");
     p += 1;
 
     // ── Chain ───────────────────────────────────────────────────────

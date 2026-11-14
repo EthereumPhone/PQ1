@@ -116,10 +116,13 @@ impl ExactAmountText {
                     cursor += 1;
                     bytes[cursor..cursor + unit.len()].copy_from_slice(unit);
                 }
-                return Some(Self {
+                let text = Self {
                     bytes,
                     len: u8::try_from(text_len).ok()?,
-                });
+                };
+                // Never publish a text the page cannot lay out whole.
+                text.layout()?;
+                return Some(text);
             }
             fraction_digits = fraction_digits.checked_add(1)?;
         }
@@ -130,14 +133,98 @@ impl ExactAmountText {
         &self.bytes[..usize::from(self.len)]
     }
 
-    fn paint(&self, row1: &mut [u8; DISPLAY_COLS], row2: &mut [u8; DISPLAY_COLS]) {
-        *row1 = [b' '; DISPLAY_COLS];
-        *row2 = [b' '; DISPLAY_COLS];
+    /// The number and its unit, split at the separating space.
+    fn parts(&self) -> (&[u8], &[u8]) {
         let text = self.text();
-        let first = core::cmp::min(text.len(), DISPLAY_COLS);
-        row1[..first].copy_from_slice(&text[..first]);
-        if text.len() > first {
-            row2[..text.len() - first].copy_from_slice(&text[first..]);
+        match text.iter().position(|&b| b == b' ') {
+            Some(sp) => (&text[..sp], &text[sp + 1..]),
+            None => (text, &[]),
+        }
+    }
+
+    /// The page rows 1-3 for this text: the shared ladder of
+    /// `primitives` — one row; split at the point; number over unit; wrapped
+    /// with `>` continuation marks over two rows, then three; last, the
+    /// number wrapped over two rows with the unit alone on row 3. `None` row
+    /// 3 means the `> next` hint goes there. Every byte of the text appears,
+    /// in order, and no row can pass for a standalone amount: until
+    /// 2026-11-14 the text was cut at column 16 with no mark
+    /// (`1234.98765432109` over `8765432 DAI`).
+    fn layout(&self) -> Option<[[u8; DISPLAY_COLS]; 3]> {
+        const W: usize = DISPLAY_COLS;
+        const MARK: u8 = b'>';
+        let text = self.text();
+        let (num, unit) = self.parts();
+        let (n, u) = (num.len(), unit.len());
+        let unit_cols = if u == 0 { 0 } else { 1 + u };
+        let mut rows = [[b' '; W]; 3];
+        let put = |row: &mut [u8; W], at: usize, bytes: &[u8]| row[at..at + bytes.len()].copy_from_slice(bytes);
+        let put_unit = |row: &mut [u8; W], at: usize| {
+            if u != 0 {
+                row[at + 1..at + 1 + u].copy_from_slice(unit);
+            }
+        };
+        if text.len() <= W {
+            put(&mut rows[0], 0, text);
+            return Some(rows);
+        }
+        if let Some(dot) = num.iter().position(|&b| b == b'.') {
+            if dot <= W && text.len() - dot <= W {
+                put(&mut rows[0], 0, &text[..dot]);
+                put(&mut rows[1], 0, &text[dot..]);
+                return Some(rows);
+            }
+        }
+        if n <= W && u != 0 && u <= W {
+            put(&mut rows[0], 0, num);
+            put(&mut rows[1], 0, unit);
+            return Some(rows);
+        }
+        let head = W - 1;
+        if n <= head {
+            return None;
+        }
+        put(&mut rows[0], 0, &num[..head]);
+        rows[0][head] = MARK;
+        let rest = n - head;
+        if 1 + rest + unit_cols <= W {
+            rows[1][0] = MARK;
+            put(&mut rows[1], 1, &num[head..]);
+            put_unit(&mut rows[1], 1 + rest);
+            return Some(rows);
+        }
+        let mid = (W - 2).min(rest - 1);
+        if mid > 0 && 1 + (rest - mid) + unit_cols <= W {
+            rows[1][0] = MARK;
+            put(&mut rows[1], 1, &num[head..head + mid]);
+            rows[1][1 + mid] = MARK;
+            rows[2][0] = MARK;
+            put(&mut rows[2], 1, &num[head + mid..]);
+            put_unit(&mut rows[2], 1 + rest - mid);
+            return Some(rows);
+        }
+        if u != 0 && u <= W && 1 + rest <= W {
+            rows[1][0] = MARK;
+            put(&mut rows[1], 1, &num[head..]);
+            put(&mut rows[2], 0, unit);
+            return Some(rows);
+        }
+        None
+    }
+
+    /// Paint rows 1-3 of an amount page. Returns `true` when row 3 is free
+    /// and now holds the `> next` hint (the caller marks it as chrome).
+    fn paint(&self, row1: &mut [u8; DISPLAY_COLS], row2: &mut [u8; DISPLAY_COLS], row3: &mut [u8; DISPLAY_COLS]) -> bool {
+        // `new` refuses any text without a layout.
+        let rows = self.layout().unwrap_or([[b' '; DISPLAY_COLS]; 3]);
+        *row1 = rows[0];
+        *row2 = rows[1];
+        if rows[2] == [b' '; DISPLAY_COLS] {
+            write_line(row3, "> next");
+            true
+        } else {
+            *row3 = rows[2];
+            false
         }
     }
 
@@ -1084,9 +1171,9 @@ fn render_amount(
     write_label_row(pages, p, field.label);
     {
         let [_, r1, r2, foot] = pages.page_mut(p);
-        amount_text.paint(r1, r2);
-        write_line(foot, "> next");
-        pages.mark_nav(p, 3);
+        if amount_text.paint(r1, r2, foot) {
+            pages.mark_nav(p, 3);
+        }
     }
     Ok(amount_text.witness())
 }
@@ -1178,9 +1265,9 @@ fn render_token_amount(
             }
             TokenAmountArm::Bound { ticker, .. } => {
                 let amount_text = bound_text.expect("bound arm precomputes exact amount text");
-                amount_text.paint(r1, r2);
-                write_line(foot, "> next");
-                pages.mark_nav(p, 3);
+                if amount_text.paint(r1, r2, foot) {
+                    pages.mark_nav(p, 3);
+                }
                 // For a non-native token, independently re-check the metadata's
                 // chain as well as its contract before allowing the banner to
                 // summarize it. The witness reuses the painted bytes.
@@ -1283,17 +1370,9 @@ mod exact_amount_text_tests {
     fn exact_text_paints_the_same_complete_bytes_and_refuses_over_capacity() {
         let text =
             ExactAmountText::new(word_from_u128(1_078_608_424_000_534_547), 18, b"ETH").unwrap();
-        let mut row1 = [b' '; DISPLAY_COLS];
-        let mut row2 = [b' '; DISPLAY_COLS];
-        text.paint(&mut row1, &mut row2);
-        let mut painted = [0u8; AMOUNT_TEXT_CAPACITY];
-        painted[..DISPLAY_COLS].copy_from_slice(&row1);
-        painted[DISPLAY_COLS..].copy_from_slice(&row2);
-        let painted_len = painted
-            .iter()
-            .rposition(|&b| b != b' ')
-            .map_or(0, |i| i + 1);
-        assert_eq!(&painted[..painted_len], text.text());
+        let (mut row1, mut row2, mut row3) = ([b' '; DISPLAY_COLS], [b' '; DISPLAY_COLS], [b' '; DISPLAY_COLS]);
+        let row3_is_hint = text.paint(&mut row1, &mut row2, &mut row3);
+        assert_eq!(read_back(&row1, &row2, &row3, row3_is_hint), text.text());
 
         assert!(ExactAmountText::new([0xff; 32], 0, b"ETH").is_none());
         assert!(ExactAmountText::new(word_from_u128(1), 36, b"ETH").is_none());
@@ -1309,6 +1388,91 @@ mod exact_amount_text_tests {
             .expect("32-cell exact amount must fit");
         assert_eq!(exact_32.text().len(), AMOUNT_TEXT_CAPACITY);
         assert!(ExactAmountText::new(word_from_u128(10u128.pow(28)), 0, b"ETH").is_none());
+    }
+
+    extern crate std;
+    use std::vec::Vec;
+
+    /// The text back from painted rows: marks stripped, `> next` excluded.
+    fn read_back(r1: &[u8; DISPLAY_COLS], r2: &[u8; DISPLAY_COLS], r3: &[u8; DISPLAY_COLS], r3_hint: bool) -> Vec<u8> {
+        let trim = |r: &[u8]| -> Vec<u8> {
+            let end = r.iter().rposition(|&b| b != b' ').map_or(0, |i| i + 1);
+            r[..end].to_vec()
+        };
+        let (a, b) = (trim(r1), trim(r2));
+        let c = if r3_hint {
+            assert_eq!(trim(r3), b"> next");
+            Vec::new()
+        } else {
+            trim(r3)
+        };
+        let mut out = Vec::new();
+        if let Some(head) = a.strip_suffix(b">") {
+            out.extend_from_slice(head);
+            let b = b.strip_prefix(b">").expect("a wrapped row opens with the mark");
+            if let Some(mid) = b.strip_suffix(b">") {
+                out.extend_from_slice(mid);
+                out.extend_from_slice(c.strip_prefix(b">").expect("wrapped row 3 opens with the mark"));
+            } else if c.is_empty() {
+                out.extend_from_slice(b);
+            } else {
+                out.extend_from_slice(b);
+                out.push(b' ');
+                out.extend_from_slice(&c);
+            }
+            return out;
+        }
+        assert!(c.is_empty(), "row 3 only continues a wrap");
+        out.extend_from_slice(&a);
+        if !b.is_empty() {
+            if !b.starts_with(b".") {
+                out.push(b' ');
+            }
+            out.extend_from_slice(&b);
+        }
+        out
+    }
+
+    /// Every text `new` accepts has a layout, and the layout shows every
+    /// byte in order: no row is cut without a mark, nothing is dropped.
+    #[test]
+    fn every_exact_text_is_laid_out_whole_and_marked() {
+        let mut checked = 0usize;
+        for unit_len in 0..=16usize {
+            let unit: Vec<u8> = (0..unit_len).map(|i| b'A' + (i % 26) as u8).collect();
+            for digits in 1..=32u32 {
+                for decimals in [0u32, 2, 6, 18, 24] {
+                    // An all-nines value with `digits` digits.
+                    let v = 10u128.saturating_pow(digits.min(38)).saturating_sub(1);
+                    let Some(text) = ExactAmountText::new(word_from_u128(v), decimals, &unit) else {
+                        continue;
+                    };
+                    let (mut r1, mut r2, mut r3) = ([b' '; DISPLAY_COLS], [b' '; DISPLAY_COLS], [b' '; DISPLAY_COLS]);
+                    let hint = text.paint(&mut r1, &mut r2, &mut r3);
+                    assert_eq!(read_back(&r1, &r2, &r3, hint), text.text(), "{:?}", core::str::from_utf8(text.text()));
+                    // No digit row is a bare cut: a row ending in a digit
+                    // that the next row continues must carry the mark.
+                    if r2[0].is_ascii_digit() {
+                        assert!(!r1.iter().all(|b| b.is_ascii_digit()), "unmarked cut: {r1:?} / {r2:?}");
+                    }
+                    checked += 1;
+                }
+            }
+        }
+        // Every text the capacity admits, at every unit length, has a layout.
+        for len in 1..=AMOUNT_TEXT_CAPACITY {
+            for unit_len in 0..=16usize {
+                let sep = usize::from(unit_len != 0);
+                let Some(digits) = len.checked_sub(unit_len + sep).filter(|&d| d >= 1 && d <= 38) else {
+                    continue;
+                };
+                let unit: Vec<u8> = (0..unit_len).map(|_| b'U').collect();
+                let v = 10u128.pow(u32::try_from(digits).unwrap() - 1);
+                let text = ExactAmountText::new(word_from_u128(v), 0, &unit);
+                assert!(text.is_some(), "{digits} digits + {unit_len}-byte unit ({len} cells) has no layout");
+            }
+        }
+        assert!(checked > 500, "{checked}");
     }
 }
 
@@ -2951,9 +3115,9 @@ fn render_array_element(
             // solely to authenticate the otherwise-default 18-decimal scale.
             let [_, r1, r2, foot] = pages.page_mut(p);
             let amount_text = exact_amount_text.expect("scaled amount array was precomputed");
-            amount_text.paint(r1, r2);
-            write_line(foot, "> next");
-            pages.mark_nav(p, 3);
+            if amount_text.paint(r1, r2, foot) {
+                pages.mark_nav(p, 3);
+            }
             Ok(())
         }
         FormatOp::Unit => {
@@ -2964,9 +3128,9 @@ fn render_array_element(
             }
             let [_, r1, r2, foot] = pages.page_mut(p);
             let amount_text = exact_amount_text.expect("scaled unit array was precomputed");
-            amount_text.paint(r1, r2);
-            write_line(foot, "> next");
-            pages.mark_nav(p, 3);
+            if amount_text.paint(r1, r2, foot) {
+                pages.mark_nav(p, 3);
+            }
             Ok(())
         }
         FormatOp::TokenAmount => {
@@ -2981,9 +3145,9 @@ fn render_array_element(
                 Some((_decimals, _ticker, _token_contract)) => {
                     let amount_text =
                         exact_amount_text.expect("bound token amount array was precomputed");
-                    amount_text.paint(r1, r2);
-                    write_line(foot, "> next");
-                    pages.mark_nav(p, 3);
+                    if amount_text.paint(r1, r2, foot) {
+                        pages.mark_nav(p, 3);
+                    }
                 }
                 None => {
                     let fit = write_amount_two_rows(r1, r2, &value, 0, 0, false, true, "");
@@ -3124,9 +3288,9 @@ fn render_unit(
     write_label_row(pages, p, field.label);
     {
         let [_, r1, r2, foot] = pages.page_mut(p);
-        amount_text.paint(r1, r2);
-        write_line(foot, "> next");
-        pages.mark_nav(p, 3);
+        if amount_text.paint(r1, r2, foot) {
+            pages.mark_nav(p, 3);
+        }
     }
     Ok(())
 }
@@ -6129,8 +6293,9 @@ mod adversarial_renderer_regressions {
             &params,
         )
         .expect("high-precision unit must render exactly");
-        assert_eq!(high_precision_pages.buf[0][1], *b"1.00000000000000");
-        assert_eq!(&high_precision_pages.buf[0][2][..11], b"0001 shares");
+        // Wrapped with continuation marks (2026-11-14), every digit kept.
+        assert_eq!(high_precision_pages.buf[0][1], *b"1.0000000000000>");
+        assert_eq!(&high_precision_pages.buf[0][2][..13], b">00001 shares");
 
         let mut pages = sentinel_pages();
         let before_len = pages.len;
@@ -6187,8 +6352,8 @@ mod adversarial_renderer_regressions {
         .expect("high-precision token amount must render exactly")
         .expect("bound exact amount mints witness");
         assert_eq!(witness.text(), b"1.000000000000000001 TOK");
-        assert_eq!(high_precision_pages.buf[0][1], *b"1.00000000000000");
-        assert_eq!(&high_precision_pages.buf[0][2][..8], b"0001 TOK");
+        assert_eq!(high_precision_pages.buf[0][1], *b"1.0000000000000>");
+        assert_eq!(&high_precision_pages.buf[0][2][..10], b">00001 TOK");
 
         let mut pages = sentinel_pages();
         let before_len = pages.len;
@@ -7007,8 +7172,8 @@ mod adversarial_renderer_regressions {
         assert_eq!(witness.text(), b"1.000000000000000001 ETH");
         assert_eq!(pages.len, 2);
         assert_eq!(pages.buf[0], before_buf[0]);
-        assert_eq!(pages.buf[1][1], *b"1.00000000000000");
-        assert_eq!(&pages.buf[1][2][..8], b"0001 ETH");
+        assert_eq!(pages.buf[1][1], *b"1.0000000000000>");
+        assert_eq!(&pages.buf[1][2][..10], b">00001 ETH");
     }
 
     #[test]
@@ -7037,8 +7202,8 @@ mod adversarial_renderer_regressions {
         assert_eq!(witness.text(), b"1.000000000000000001 ETH");
         assert_eq!(pages.len, 2);
         assert_eq!(pages.buf[0], before_buf[0]);
-        assert_eq!(pages.buf[1][1], *b"1.00000000000000");
-        assert_eq!(&pages.buf[1][2][..8], b"0001 ETH");
+        assert_eq!(pages.buf[1][1], *b"1.0000000000000>");
+        assert_eq!(&pages.buf[1][2][..10], b">00001 ETH");
     }
 
     #[test]

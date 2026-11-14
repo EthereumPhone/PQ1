@@ -233,9 +233,17 @@ pub enum FitErr {
 /// Result of [`layout_amount`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AmountLayout {
-    pub lines: [Line; 2],
+    pub lines: [Line; 3],
     pub n: u8,
     pub tier: Tier,
+}
+
+impl AmountLayout {
+    /// The `n` laid-out lines.
+    #[must_use]
+    pub fn as_slice(&self) -> &[Line] {
+        &self.lines[..usize::from(self.n).min(3)]
+    }
 }
 
 /// Numbers keep their unit on one line while the pair fits a one-line tier
@@ -255,7 +263,7 @@ pub fn layout_amount(number: &[u8], unit: &[u8], region: Region) -> Result<Amoun
         for &tier in &[Tier::T36, Tier::T32] {
             if fit_tier(&[(one.as_bytes(), Weight::Regular)], region) == Some(tier) {
                 return Ok(AmountLayout {
-                    lines: [one, Line::EMPTY],
+                    lines: [one, Line::EMPTY, Line::EMPTY],
                     n: 1,
                     tier,
                 });
@@ -265,7 +273,7 @@ pub fn layout_amount(number: &[u8], unit: &[u8], region: Region) -> Result<Amoun
             // A bare number: any tier that fits it on one line is fine.
             if let Some(tier) = fit_tier(&[(one.as_bytes(), Weight::Regular)], region) {
                 return Ok(AmountLayout {
-                    lines: [one, Line::EMPTY],
+                    lines: [one, Line::EMPTY, Line::EMPTY],
                     n: 1,
                     tier,
                 });
@@ -283,7 +291,7 @@ pub fn layout_amount(number: &[u8], unit: &[u8], region: Region) -> Result<Amoun
     let lines = [(num.as_bytes(), Weight::Regular), (unit_line.as_bytes(), Weight::Regular)];
     match fit_tier(&lines, region) {
         Some(tier) => Ok(AmountLayout {
-            lines: [num, unit_line],
+            lines: [num, unit_line, Line::EMPTY],
             n: 2,
             tier,
         }),
@@ -315,9 +323,9 @@ fn fits_at(lines: &[LineIn<'_>], region: Region, tier: Tier) -> bool {
 }
 
 /// The owner-approved exception (2026-09-23) to [`layout_amount`]'s
-/// "the number never breaks": an exact decimal too wide for any tier —
+/// "the number never breaks": an exact amount too wide for any tier —
 /// a full-precision 18-decimal amount such as a CoW quote-derived limit —
-/// wraps once, with explicit continuation marks, never rounded:
+/// wraps with explicit continuation marks, never rounded:
 ///
 /// ```text
 ///   1234.98765432109876...
@@ -325,10 +333,15 @@ fn fits_at(lines: &[LineIn<'_>], region: Region, tier: Tier) -> bool {
 /// ```
 ///
 /// Line 1 carries the complete whole part and the decimal point (the
-/// magnitude is read there); line 2 is fraction digits plus the full unit
-/// and opens with the mark, so it cannot pass for a standalone amount.
-/// The largest tier that fits wins; within it, line 1 takes as many digits
-/// as fit. Callers use it only after [`layout_amount`] returned
+/// magnitude is read there); every later line opens with the mark, so it
+/// cannot pass for a standalone amount, and the last one ends with the full
+/// unit. An integer (no decimal point: base units, raw `units`) wraps the
+/// same way. Two lines at the largest tier that fits them; only when no
+/// tier takes two, three lines at a tier that stacks three (the middle line
+/// is mark, digits, mark) — the page painter's three-row form
+/// (`primitives::write_token_amount_rows`), so the screen never refuses an
+/// amount its page shows. Within a tier each line takes as many digits as
+/// fit. Callers use it only after [`layout_amount`] returned
 /// [`FitErr::TooWide`] ([`layout_amount_or_wrap`]).
 pub fn layout_amount_wrapped(number: &[u8], unit: &[u8], region: Region) -> Result<AmountLayout, FitErr> {
     if number.is_empty() {
@@ -339,46 +352,59 @@ pub fn layout_amount_wrapped(number: &[u8], unit: &[u8], region: Region) -> Resu
     {
         return Err(FitErr::Unrenderable);
     }
-    let Some(dot) = number.iter().position(|&b| b == b'.') else {
-        return Err(FitErr::TooWide);
-    };
-    for &tier in &TIERS_DESC {
-        if tier.max_lines() < 2 {
-            continue;
-        }
-        // Line 1 = number[..k] + mark, the largest k that fits; k keeps the
-        // whole part and the point on line 1 and leaves ≥ 1 digit to wrap.
-        let mut k = number.len() - 1;
-        while k > dot {
-            let mut l1 = Line::EMPTY;
-            if push_str(&mut l1, &number[..k])
-                && push_str(&mut l1, AMOUNT_WRAP_MARK)
-                && fits_at(&[(l1.as_bytes(), Weight::Regular)], region, tier)
-            {
-                let mut l2 = Line::EMPTY;
-                let l2_ok = push_str(&mut l2, AMOUNT_WRAP_MARK)
-                    && push_str(&mut l2, &number[k..])
-                    && (unit.is_empty() || (push_str(&mut l2, b" ") && push_str(&mut l2, unit)));
-                if l2_ok
-                    && fits_at(
-                        &[(l1.as_bytes(), Weight::Regular), (l2.as_bytes(), Weight::Regular)],
-                        region,
-                        tier,
-                    )
-                {
-                    return Ok(AmountLayout {
-                        lines: [l1, l2],
-                        n: 2,
-                        tier,
-                    });
-                }
-                // A shorter line 1 only lengthens line 2: next tier.
-                break;
+    // Line 1 must keep the whole part and the point (an integer: at least
+    // one digit).
+    let min_head = number.iter().position(|&b| b == b'.').map_or(1, |dot| dot + 1);
+    for lines in [2usize, 3] {
+        for &tier in &TIERS_DESC {
+            if tier.max_lines() < lines {
+                continue;
             }
-            k -= 1;
+            if let Some(a) = wrap_at(number, unit, region, tier, lines, min_head) {
+                return Ok(a);
+            }
         }
     }
     Err(FitErr::TooWide)
+}
+
+/// `number` over `lines` (2 or 3) marked lines at `tier`, each non-last
+/// line greedy, or `None`.
+fn wrap_at(number: &[u8], unit: &[u8], region: Region, tier: Tier, lines: usize, min_head: usize) -> Option<AmountLayout> {
+    let m = AMOUNT_WRAP_MARK;
+    let fits = |l: &Line| fits_at(&[(l.as_bytes(), Weight::Regular)], region, tier);
+    // Greedy: the longest `number[from..k]` (with its marks) that fits.
+    let longest = |from: usize, lead: bool, min_end: usize| -> Option<(Line, usize)> {
+        let mut k = number.len().checked_sub(1)?;
+        while k >= min_end && k > from {
+            let mut l = Line::EMPTY;
+            if (!lead || push_str(&mut l, m)) && push_str(&mut l, &number[from..k]) && push_str(&mut l, m) && fits(&l) {
+                return Some((l, k));
+            }
+            k -= 1;
+        }
+        None
+    };
+    let (l1, k1) = longest(0, false, min_head)?;
+    let (l2, k2) = if lines == 3 { longest(k1, true, k1 + 1)? } else { (Line::EMPTY, k1) };
+    let mut last = Line::EMPTY;
+    let ok = push_str(&mut last, m)
+        && push_str(&mut last, &number[k2..])
+        && (unit.is_empty() || (push_str(&mut last, b" ") && push_str(&mut last, unit)));
+    if !ok || !fits(&last) {
+        return None;
+    }
+    let out = if lines == 3 { [l1, l2, last] } else { [l1, last, Line::EMPTY] };
+    let n = u8::try_from(lines).ok()?;
+    let ins: [LineIn<'_>; 3] = [
+        (out[0].as_bytes(), Weight::Regular),
+        (out[1].as_bytes(), Weight::Regular),
+        (out[2].as_bytes(), Weight::Regular),
+    ];
+    if !fits_at(&ins[..lines], region, tier) {
+        return None;
+    }
+    Some(AmountLayout { lines: out, n, tier })
 }
 
 /// [`layout_amount`], falling back to [`layout_amount_wrapped`] only when
@@ -528,16 +554,27 @@ mod kani_harnesses {
         let unit = b"DAI";
         if let Ok(a) = layout_amount_wrapped(&num[..n], unit, Region::Docked) {
             let l1 = a.lines[0].as_bytes();
-            let l2 = a.lines[1].as_bytes();
+            let last = a.lines[usize::from(a.n) - 1].as_bytes();
             let m = AMOUNT_WRAP_MARK.len();
-            assert!(a.n == 2 && l1.len() > m && l2.len() >= m + 1 + unit.len());
+            assert!((a.n == 2 || a.n == 3) && l1.len() > m && last.len() >= m + 1 + unit.len());
             let head = &l1[..l1.len() - m];
-            let tail = &l2[m..l2.len() - 1 - unit.len()];
-            assert!(&l1[l1.len() - m..] == AMOUNT_WRAP_MARK && &l2[..m] == AMOUNT_WRAP_MARK);
-            assert!(&l2[l2.len() - unit.len()..] == unit);
-            assert!(head.len() + tail.len() == n);
-            assert!(head == &num[..head.len()] && tail == &num[head.len()..n]);
-            assert!(head.contains(&b'.'));
+            let mid: &[u8] = if a.n == 3 {
+                let l2 = a.lines[1].as_bytes();
+                assert!(l2.len() > 2 * m && &l2[..m] == AMOUNT_WRAP_MARK && &l2[l2.len() - m..] == AMOUNT_WRAP_MARK);
+                &l2[m..l2.len() - m]
+            } else {
+                &[]
+            };
+            let tail = &last[m..last.len() - 1 - unit.len()];
+            assert!(&l1[l1.len() - m..] == AMOUNT_WRAP_MARK && &last[..m] == AMOUNT_WRAP_MARK);
+            assert!(&last[last.len() - unit.len()..] == unit);
+            assert!(head.len() + mid.len() + tail.len() == n);
+            assert!(head == &num[..head.len()]);
+            assert!(mid == &num[head.len()..head.len() + mid.len()]);
+            assert!(tail == &num[head.len() + mid.len()..n]);
+            if let Some(dot) = num[..n].iter().position(|&b| b == b'.') {
+                assert!(dot < head.len());
+            }
         }
     }
 
@@ -732,9 +769,34 @@ mod tests {
         }
         // A million DAI at full precision still fits.
         assert!(layout_amount_or_wrap(b"1000000.987654321098765432", b"DAI", Region::Docked).is_ok());
-        // No decimal point: nothing to wrap at.
+        // An integer wraps too (base units, raw `units`), every
+        // continuation marked.
+        let a = layout_amount_or_wrap(b"1234567890123456789012", b"USDC", Region::Docked).unwrap();
+        assert_eq!(a.n, 2);
+        assert!(a.lines[0].as_bytes().ends_with(AMOUNT_WRAP_MARK));
+        assert!(a.lines[1].as_bytes().starts_with(AMOUNT_WRAP_MARK) && a.lines[1].as_bytes().ends_with(b" USDC"));
+        // Three lines only when two do not hold every digit (the page's
+        // three-row form): 123456789012.345678901234567890 SHIB.
+        let num = b"123456789012.3456789012345678901234567890";
+        let a = layout_amount_or_wrap(num, b"SHIB", Region::Docked).unwrap();
+        assert_eq!((a.n, a.tier), (3, Tier::T22));
+        let [l1, l2, l3] = [a.lines[0].as_bytes(), a.lines[1].as_bytes(), a.lines[2].as_bytes()];
+        assert!(l1.ends_with(AMOUNT_WRAP_MARK) && l1.contains(&b'.'));
+        assert!(l2.starts_with(AMOUNT_WRAP_MARK) && l2.ends_with(AMOUNT_WRAP_MARK));
+        assert!(l3.starts_with(AMOUNT_WRAP_MARK) && l3.ends_with(b" SHIB"));
+        let mut joined = [0u8; 96];
+        let mut j = 0;
+        for part in [&l1[..l1.len() - 3], &l2[3..l2.len() - 3], &l3[3..l3.len() - 5]] {
+            joined[j..j + part.len()].copy_from_slice(part);
+            j += part.len();
+        }
+        assert_eq!(&joined[..j], &num[..]);
+        for l in [l1, l2, l3] {
+            assert!(measure_q6(l, a.tier.px(), false, 0).unwrap() <= 276 * 64);
+        }
+        // Beyond three lines: refused, never cut.
         assert_eq!(
-            layout_amount_or_wrap(b"1234567890123456789012", b"USDC", Region::Docked),
+            layout_amount_or_wrap(&[b'9'; 70], b"USDC", Region::Docked),
             Err(FitErr::TooWide)
         );
         // Non-TooWide errors pass through unchanged.

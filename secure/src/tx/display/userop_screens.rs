@@ -85,7 +85,11 @@ pub(crate) fn classify<'a>(inp: &UserOpInputs<'a>) -> Result<Route<'a>, ()> {
                     | Erc20Call::Approve { amount, .. } => amount,
                 };
                 let unlimited = matches!(&call, Erc20Call::Approve { .. }) && is_unlimited_amount(amount);
-                if !unlimited && !super::primitives::token_amount_is_exactly_renderable(amount, meta) {
+                if !unlimited && !super::primitives::token_amount_is_exactly_renderable(
+                    amount,
+                    meta,
+                    super::primitives::AmountRows::Three,
+                ) {
                     return Err(());
                 }
                 Route::Erc20Known(call, meta)

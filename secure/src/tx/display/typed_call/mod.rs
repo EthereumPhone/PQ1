@@ -21,7 +21,7 @@
 
 use super::primitives::{
     build_legacy_fee_pages, hex_nibble, write_addr_full_or_name, write_chain, write_line,
-    write_native_amount_two_rows, write_nonce_row, AmountFit,
+    write_native_amount_rows, write_nonce_row, AmountFit,
 };
 use super::Pages;
 use crate::names::NameResolver;
@@ -144,14 +144,11 @@ pub(super) fn try_render_typed_call(
     if value_page == 1 {
         write_line(&mut pages.buf[page_idx][0], "! VALUE:");
         let [_lbl, r1, r2, foot] = &mut pages.buf[page_idx];
-        let fit = write_native_amount_two_rows(r1, r2, &tx.value, tx.chain_id);
-        write_line(
-            foot,
-            match fit {
-                AmountFit::Full => "> next",
-                AmountFit::Overflow => "!AMOUNT OVERFLOW",
-            },
-        );
+        // Rows 1-2 and `> next`, or rows 1-3 when only a third wrapped row
+        // holds every digit.
+        if write_native_amount_rows(r1, r2, foot, &tx.value, tx.chain_id) == AmountFit::Overflow {
+            write_line(foot, "!AMOUNT OVERFLOW");
+        }
         page_idx += 1;
     }
 

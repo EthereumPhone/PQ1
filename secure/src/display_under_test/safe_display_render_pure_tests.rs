@@ -184,9 +184,9 @@ pub(super) fn wsteth_meta() -> Erc20Metadata<'static> {
 
 #[test]
 fn exact_preflight_refuses_safe_erc20_value_too_wide_for_exact_display() {
-    // 10^25 + 1: too wide even for the exact wrapped form (10^21 + 1 now
-    // wraps exactly — `exact_preflight_wraps_full_precision_value_exactly`).
-    let amount = 10_000_000_000_000_000_000_000_001u128;
+    // 10^38 + 1: too wide even for the exact three-row wrap (10^25 + 1 now
+    // takes three rows — `legacy_token_third_row_holds_what_two_rows_cannot`).
+    let amount = 100_000_000_000_000_000_000_000_000_000_000_000_001u128;
     let mut raw = erc20_transfer([0x21; 20], 0);
     raw[52..68].copy_from_slice(&amount.to_be_bytes());
     let meta = Erc20Metadata {

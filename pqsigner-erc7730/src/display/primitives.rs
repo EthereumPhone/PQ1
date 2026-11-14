@@ -119,6 +119,16 @@ pub enum AmountForm {
     BaseUnits,
 }
 
+/// How many value rows a page gives an amount: two, or three when the page's
+/// last row would otherwise only carry the `> next` hint. Every amount site
+/// passes its own capacity to the shared decision, so its page and its pixel
+/// screen agree on the form.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum AmountRows {
+    Two,
+    Three,
+}
+
 /// Return `true` iff scaling `value` to `fraction_digits` would discard only
 /// zero base-10 digits.
 ///
@@ -304,17 +314,22 @@ pub fn write_amount_two_rows(
                 row1[..need1].copy_from_slice(digits);
                 row2[..need2].copy_from_slice(unit_bytes);
                 AmountFit::Full
-            } else if n <= 2 * DISPLAY_COLS && unit_bytes.len() < DISPLAY_COLS {
-                // Split integer across rows, unit takes its own chars on row 2.
-                let first = core::cmp::min(n, DISPLAY_COLS);
-                row1[..first].copy_from_slice(&digits[..first]);
-                let rest = &digits[first..];
-                if rest.len() + 1 + unit_bytes.len() > DISPLAY_COLS {
+            } else if n > DISPLAY_COLS - 1 && unit_bytes.len() < DISPLAY_COLS {
+                // Wrap the integer with continuation marks (row 1: 15 digits
+                // + '>'; row 2: '>' + the rest + unit), so neither row can
+                // pass for a whole number. Until 2026-11-14 it was cut at
+                // column 16 with no mark: `7789940612296834` over
+                // `8177161944 wei` reads as two numbers.
+                let head = DISPLAY_COLS - 1;
+                let rest = &digits[head..];
+                let unit_cols = if unit_bytes.is_empty() { 0 } else { 1 + unit_bytes.len() };
+                if 1 + rest.len() + unit_cols > DISPLAY_COLS {
+                    *row1 = [b' '; DISPLAY_COLS];
                     return AmountFit::Overflow;
                 }
-                row2[..rest.len()].copy_from_slice(rest);
-                row2[rest.len()] = b' ';
-                row2[rest.len() + 1..rest.len() + 1 + unit_bytes.len()].copy_from_slice(unit_bytes);
+                row1[..head].copy_from_slice(&digits[..head]);
+                row1[head] = AMOUNT_WRAP_MARK;
+                write_wrap_last_row(row2, rest, unit_bytes);
                 AmountFit::Full
             } else {
                 AmountFit::Overflow
@@ -721,7 +736,7 @@ pub fn write_native_amount_two_rows(
 ) -> AmountFit {
     let mut painted_row1 = [b' '; DISPLAY_COLS];
     let mut painted_row2 = [b' '; DISPLAY_COLS];
-    if paint_native_amount(&mut painted_row1, &mut painted_row2, value, chain_id).is_some() {
+    if paint_native_amount(&mut painted_row1, &mut painted_row2, None, value, chain_id).is_some() {
         *row1 = painted_row1;
         *row2 = painted_row2;
         AmountFit::Full
@@ -730,44 +745,79 @@ pub fn write_native_amount_two_rows(
     }
 }
 
-/// The form [`write_native_amount_two_rows`] paints, or `None` when it
-/// overflows. Pixel screens use this so they always show the page's form.
-#[must_use]
-pub fn native_amount_form(value: &U256, chain_id: u64) -> Option<AmountForm> {
-    let mut row1 = [b' '; DISPLAY_COLS];
-    let mut row2 = [b' '; DISPLAY_COLS];
-    paint_native_amount(&mut row1, &mut row2, value, chain_id)
+/// [`write_native_amount_two_rows`] for an amount page whose rows 1-3 are the
+/// value rows: rows 1-2 and `> next` in row 3, unless only a third wrapped
+/// row holds every digit (a full-precision "send max" of a large POL or ETH
+/// balance, which two rows could show only in wei). On
+/// [`AmountFit::Overflow`] the rows are left unchanged.
+pub fn write_native_amount_rows(
+    row1: &mut [u8; DISPLAY_COLS],
+    row2: &mut [u8; DISPLAY_COLS],
+    row3: &mut [u8; DISPLAY_COLS],
+    value: &U256,
+    chain_id: u64,
+) -> AmountFit {
+    let mut painted = [[b' '; DISPLAY_COLS]; 3];
+    let [p1, p2, p3] = &mut painted;
+    match paint_native_amount(p1, p2, Some(p3), value, chain_id) {
+        Some((_, used_third)) => {
+            if !used_third {
+                write_line(p3, "> next");
+            }
+            [*row1, *row2, *row3] = painted;
+            AmountFit::Full
+        }
+        None => AmountFit::Overflow,
+    }
 }
 
+/// The form the native painter uses with `rows` value rows, or `None` when it
+/// overflows. Pixel screens use this so they always show the page's form.
+#[must_use]
+pub fn native_amount_form(value: &U256, chain_id: u64, rows: AmountRows) -> Option<AmountForm> {
+    let mut row1 = [b' '; DISPLAY_COLS];
+    let mut row2 = [b' '; DISPLAY_COLS];
+    let mut row3 = [b' '; DISPLAY_COLS];
+    let third = match rows {
+        AmountRows::Two => None,
+        AmountRows::Three => Some(&mut row3),
+    };
+    paint_native_amount(&mut row1, &mut row2, third, value, chain_id).map(|(form, _)| form)
+}
+
+/// `(form, whether row 3 was used)`, or `None` on overflow.
 fn paint_native_amount(
     row1: &mut [u8; DISPLAY_COLS],
     row2: &mut [u8; DISPLAY_COLS],
+    row3: Option<&mut [u8; DISPLAY_COLS]>,
     value: &U256,
     chain_id: u64,
-) -> Option<AmountForm> {
+) -> Option<(AmountForm, bool)> {
     let Some(unit) = known_native_ticker(chain_id) else {
-        return (write_amount_two_rows(row1, row2, value, 0, 0, false, true, "raw") == AmountFit::Full)
-            .then_some(AmountForm::BaseUnits);
+        // An unknown chain: no authenticated scale, the exact integer in
+        // `raw`, laid out like any other exact amount.
+        return paint_exact_decimal(row1, row2, row3, value, 0, b"raw").map(|(_, used)| (AmountForm::BaseUnits, used));
     };
-    if let Some(frac) = paint_exact_decimal(row1, row2, value, 18, unit) {
-        return Some(AmountForm::Decimal { frac });
+    // Re-borrow so row 3 can be offered to the fallback too.
+    let mut row3 = row3;
+    if let Some((frac, used_third)) = paint_exact_decimal(row1, row2, row3.as_deref_mut(), value, 18, unit) {
+        return Some((AmountForm::Decimal { frac }, used_third));
     }
     // Never round a signed native amount. The explicit base-unit suffix
     // distinguishes this exact fallback from the ticker-scaled form and from
     // unknown-chain `raw`.
-    (write_amount_two_rows(row1, row2, value, 0, 0, false, true, "wei") == AmountFit::Full)
-        .then_some(AmountForm::BaseUnits)
+    paint_exact_decimal(row1, row2, row3, value, 0, b"wei").map(|(_, used)| (AmountForm::BaseUnits, used))
 }
 
 /// Return `true` iff the real native-currency painter represents the signed
-/// value exactly.
+/// value exactly in `rows` value rows.
 ///
 /// This deliberately has no parallel precision predicate: it executes
-/// [`write_native_amount_two_rows`] into scratch rows, so pre-publication
-/// authorization and the bytes eventually painted cannot drift.
+/// the painter into scratch rows, so pre-publication authorization and the
+/// bytes eventually painted cannot drift.
 #[must_use]
-pub fn native_amount_is_exactly_renderable(value: &U256, chain_id: u64) -> bool {
-    native_amount_form(value, chain_id).is_some()
+pub fn native_amount_is_exactly_renderable(value: &U256, chain_id: u64, rows: AmountRows) -> bool {
+    native_amount_form(value, chain_id, rows).is_some()
 }
 
 /// Paint an exact derived native-currency bound (a Safe gas-refund estimate,
@@ -930,6 +980,48 @@ fn write_fee_budget_row_with_unit(
     false
 }
 
+/// One exact gwei decimal row (up to nine fraction digits, trailing zeros
+/// trimmed), with the ` gwei` suffix when `with_unit`, or bare (the unit is in
+/// the page's labels). `None` when no exact gwei decimal fits the row; never
+/// a wei integer.
+fn gwei_decimal_row(value: &U256, with_unit: bool) -> Option<[u8; DISPLAY_COLS]> {
+    let unit: &[u8] = if with_unit { b" gwei" } else { b"" };
+    let frac = exact_fraction_digits(value, 9, 0, 9)?;
+    let mut tmp = [0u8; 96];
+    let n = value.format_decimal(9, frac, true, &mut tmp)?;
+    if n + unit.len() > DISPLAY_COLS {
+        return None;
+    }
+    let mut row = [b' '; DISPLAY_COLS];
+    row[..n].copy_from_slice(&tmp[..n]);
+    row[n..n + unit.len()].copy_from_slice(unit);
+    Some(row)
+}
+
+/// The compact one-row worst-case total, as an exact native decimal only
+/// (`write_native_fee_budget_row` without its wei fallback). `false` leaves
+/// the row for the two-row layout.
+fn write_native_fee_budget_decimal_row(row: &mut [u8; DISPLAY_COLS], budget: &U256, chain_id: u64) -> bool {
+    let Some(unit) = known_native_ticker(chain_id) else {
+        return false;
+    };
+    let mut tmp = [0u8; 96];
+    for frac in [4u32, 3, 2, 1, 0].into_iter().chain(5..=18) {
+        if amount_is_exact_at_fraction_digits(budget, 18, frac) {
+            if let Some(n) = budget.format_decimal(18, frac, true, &mut tmp) {
+                if n + 1 + unit.len() <= DISPLAY_COLS {
+                    *row = [b' '; DISPLAY_COLS];
+                    row[..n].copy_from_slice(&tmp[..n]);
+                    let pos = append(row, n, b" ");
+                    let _ = append(row, pos, unit);
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
 /// Number of pages in the compact legacy EIP-1559 fee envelope.
 pub const LEGACY_FEE_PAGE_COUNT: usize = 2;
 
@@ -962,16 +1054,62 @@ pub fn build_legacy_fee_pages(
     let mut pages = [[[b' '; DISPLAY_COLS]; DISPLAY_ROWS]; LEGACY_FEE_PAGE_COUNT];
 
     if known_native_ticker(chain_id).is_some() {
-        write_line(&mut pages[0][0], "Fees: max / tip");
-        let max_exact = write_gwei(&mut pages[0][1], max_fee_per_gas);
-        let tip_exact = write_tip_row(&mut pages[0][2], max_priority_fee_per_gas);
-        write_line(&mut pages[0][3], "> next");
+        // Page 1. The compact `Fees: max / tip` layout whenever both prices
+        // fit `<gwei> gwei` on one row; otherwise the unit moves into the
+        // labels and each exact gwei decimal gets a full row. Never a wei
+        // integer while a gwei decimal fits, never a refusal for an ordinary
+        // price such as 12.065846955 gwei (2026-11-14).
+        let (max_exact, tip_exact) = if let (Some(max_row), Some(tip_row)) = (
+            gwei_decimal_row(max_fee_per_gas, true),
+            gwei_decimal_row(max_priority_fee_per_gas, true),
+        ) {
+            write_line(&mut pages[0][0], "Fees: max / tip");
+            pages[0][1] = max_row;
+            pages[0][2] = tip_row;
+            write_line(&mut pages[0][3], "> next");
+            (true, true)
+        } else if let (Some(max_row), Some(tip_row)) = (
+            gwei_decimal_row(max_fee_per_gas, false),
+            gwei_decimal_row(max_priority_fee_per_gas, false),
+        ) {
+            write_line(&mut pages[0][0], "Max fee/gwei:");
+            pages[0][1] = max_row;
+            write_line(&mut pages[0][2], "Tip/gwei:");
+            pages[0][3] = tip_row;
+            (true, true)
+        } else {
+            // Absurd prices (a million gwei or more with sub-gwei dust): the
+            // historical rows, exact wei or a refusal.
+            write_line(&mut pages[0][0], "Fees: max / tip");
+            let max_exact = write_gwei(&mut pages[0][1], max_fee_per_gas);
+            let tip_exact = write_tip_row(&mut pages[0][2], max_priority_fee_per_gas);
+            write_line(&mut pages[0][3], "> next");
+            (max_exact, tip_exact)
+        };
 
+        // Page 2. The compact one-row total whenever its decimal fits;
+        // otherwise the exact decimal over two rows (wrapped if needed, `wei`
+        // only when no decimal layout fits), with the gas on the last row.
+        // A fee oracle's `maxFeePerGas x gas` carries wei-level dust, which
+        // the one-row form almost never holds: before 2026-11-14 every such
+        // fee was refused, and the companion SDK rounded fees up to dodge it.
         write_line(&mut pages[1][0], "Worst-case:");
-        let budget_exact =
-            write_native_fee_budget_row(&mut pages[1][1], max_fee_per_gas, gas_limit, chain_id);
-        let gas_exact = write_gas(&mut pages[1][2], gas_limit);
-        write_line(&mut pages[1][3], "> next");
+        let (budget, overflow) = max_fee_per_gas.saturating_mul_u64(gas_limit);
+        let (budget_exact, gas_exact) = if overflow {
+            write_line(&mut pages[1][1], "!OVF");
+            (false, write_gas(&mut pages[1][2], gas_limit))
+        } else if write_native_fee_budget_decimal_row(&mut pages[1][1], &budget, chain_id) {
+            let gas_exact = write_gas(&mut pages[1][2], gas_limit);
+            write_line(&mut pages[1][3], "> next");
+            (true, gas_exact)
+        } else {
+            let [_, hi, lo, gas] = &mut pages[1];
+            let fit = write_native_amount_two_rows(hi, lo, &budget, chain_id) == AmountFit::Full;
+            if !fit {
+                write_line(hi, "!OVF");
+            }
+            (fit, write_gas(gas, gas_limit))
+        };
 
         return LegacyFeeRender {
             pages,
@@ -1212,86 +1350,143 @@ pub fn write_token_amount_two_rows(
     amount: &U256,
     meta: &Erc20Metadata<'_>,
 ) -> AmountFit {
-    if paint_token_amount(row1, row2, amount, meta).is_some() {
+    if paint_token_amount(row1, row2, None, amount, meta).is_some() {
         AmountFit::Full
     } else {
         AmountFit::Overflow
     }
 }
 
-/// The form [`write_token_amount_two_rows`] paints, or `None` when it
-/// overflows. Pixel screens use this so they always show the page's form.
-#[must_use]
-pub fn token_amount_form(amount: &U256, meta: &Erc20Metadata<'_>) -> Option<AmountForm> {
-    let mut row1 = [b' '; DISPLAY_COLS];
-    let mut row2 = [b' '; DISPLAY_COLS];
-    paint_token_amount(&mut row1, &mut row2, amount, meta)
+/// [`write_token_amount_two_rows`] for an amount page whose rows 1-3 are the
+/// value rows: the amount uses rows 1-2 and row 3 gets `> next`, unless only a
+/// third wrapped row holds every digit (a full-precision balance of a token
+/// with a large supply, `123456789012.345678901234567890 SHIB`). On
+/// [`AmountFit::Overflow`] all three rows are blank and the caller paints its
+/// banner in row 3.
+pub fn write_token_amount_rows(
+    row1: &mut [u8; DISPLAY_COLS],
+    row2: &mut [u8; DISPLAY_COLS],
+    row3: &mut [u8; DISPLAY_COLS],
+    amount: &U256,
+    meta: &Erc20Metadata<'_>,
+) -> AmountFit {
+    let mut third = [b' '; DISPLAY_COLS];
+    match paint_token_amount(row1, row2, Some(&mut third), amount, meta) {
+        Some((_, true)) => {
+            *row3 = third;
+            AmountFit::Full
+        }
+        Some((_, false)) => {
+            write_line(row3, "> next");
+            AmountFit::Full
+        }
+        None => {
+            *row3 = [b' '; DISPLAY_COLS];
+            AmountFit::Overflow
+        }
+    }
 }
 
+/// An unscaled integer (a token with no verified decimals) on rows 1-3 of an
+/// amount page, with no unit: one row, or wrapped with continuation marks
+/// over two or three rows; `> next` in row 3 when it is free. Up to 44
+/// digits; `Overflow` (rows unchanged) beyond.
+pub fn write_raw_integer_rows(
+    row1: &mut [u8; DISPLAY_COLS],
+    row2: &mut [u8; DISPLAY_COLS],
+    row3: &mut [u8; DISPLAY_COLS],
+    value: &U256,
+) -> AmountFit {
+    let mut painted = [[b' '; DISPLAY_COLS]; 3];
+    let [p1, p2, p3] = &mut painted;
+    match paint_exact_decimal(p1, p2, Some(p3), value, 0, b"") {
+        Some((_, used_third)) => {
+            if !used_third {
+                write_line(p3, "> next");
+            }
+            [*row1, *row2, *row3] = painted;
+            AmountFit::Full
+        }
+        None => AmountFit::Overflow,
+    }
+}
+
+/// The form the token painter uses with `rows` value rows, or `None` when it
+/// overflows. Pixel screens use this so they always show the page's form.
+#[must_use]
+pub fn token_amount_form(amount: &U256, meta: &Erc20Metadata<'_>, rows: AmountRows) -> Option<AmountForm> {
+    let mut row1 = [b' '; DISPLAY_COLS];
+    let mut row2 = [b' '; DISPLAY_COLS];
+    let mut row3 = [b' '; DISPLAY_COLS];
+    let third = match rows {
+        AmountRows::Two => None,
+        AmountRows::Three => Some(&mut row3),
+    };
+    paint_token_amount(&mut row1, &mut row2, third, amount, meta).map(|(form, _)| form)
+}
+
+/// `(form, whether row 3 was used)`, or `None` (rows blanked) on overflow.
 fn paint_token_amount(
     row1: &mut [u8; DISPLAY_COLS],
     row2: &mut [u8; DISPLAY_COLS],
+    row3: Option<&mut [u8; DISPLAY_COLS]>,
     amount: &U256,
     meta: &Erc20Metadata<'_>,
-) -> Option<AmountForm> {
+) -> Option<(AmountForm, bool)> {
     let decimals = meta.decimals as u32;
     let unit_bytes = meta.symbol;
 
-    // The exact decimal in every layout (one row, split, wrapped) BEFORE base
-    // units. When the wrap was tried after the base-unit form, every full-
-    // precision 18-decimal amount under 10^16 base units reached the user as a
-    // bare integer — `4423644323452363 base AAVE` for a 0.0044 AAVE CoW sell
-    // (Ambire NEXT, 2026-11-14).
-    if let Some(frac) = paint_exact_decimal(row1, row2, amount, decimals, unit_bytes) {
-        return Some(AmountForm::Decimal { frac });
+    // The exact decimal in every layout (one row, split, wrapped over two or
+    // three rows) BEFORE base units. When the wrap was tried after the
+    // base-unit form, every full-precision 18-decimal amount under 10^16 base
+    // units reached the user as a bare integer — `4423644323452363 base AAVE`
+    // for a 0.0044 AAVE CoW sell (Ambire NEXT, 2026-11-14).
+    let mut row3 = row3;
+    if let Some((frac, used_third)) = paint_exact_decimal(row1, row2, row3.as_deref_mut(), amount, decimals, unit_bytes) {
+        return Some((AmountForm::Decimal { frac }, used_third));
     }
 
     // Last resort, when no decimal layout holds every digit and the complete
     // symbol: the signed integer in explicitly labelled token base units —
-    // exact, never rounded.
+    // exact, never rounded, laid out like any other exact amount.
     const BASE_PREFIX: &[u8] = b"base ";
     if unit_bytes.len() <= DISPLAY_COLS.saturating_sub(BASE_PREFIX.len() + 1) {
         let mut base_unit = [0u8; DISPLAY_COLS];
         base_unit[..BASE_PREFIX.len()].copy_from_slice(BASE_PREFIX);
         base_unit[BASE_PREFIX.len()..BASE_PREFIX.len() + unit_bytes.len()].copy_from_slice(unit_bytes);
-        if write_amount_two_rows_bytes(
-            row1,
-            row2,
-            amount,
-            0,
-            0,
-            false,
-            &base_unit[..BASE_PREFIX.len() + unit_bytes.len()],
-        ) == AmountFit::Full
-        {
-            return Some(AmountForm::BaseUnits);
+        let base_unit = &base_unit[..BASE_PREFIX.len() + unit_bytes.len()];
+        if let Some((_, used_third)) = paint_exact_decimal(row1, row2, row3, amount, 0, base_unit) {
+            return Some((AmountForm::BaseUnits, used_third));
         }
     }
 
-    // Neither form fits: refuse (both rows blanked), never round.
+    // Neither form fits: refuse (rows blanked), never round.
     *row1 = [b' '; DISPLAY_COLS];
     *row2 = [b' '; DISPLAY_COLS];
     None
 }
 
 /// The exact decimal of `value` at `decimals`, in the first layout that holds
-/// every digit and the unit: one row, then split at the dot, then wrapped
-/// across both rows. Six fraction digits is the friendly minimum (trailing
-/// zeros are kept, never trimmed below it); the width grows only as far as
-/// needed to keep every base unit — up to all `decimals` digits, no lower cap.
-/// Returns the fraction width used, or `None` (rows blanked) when no layout
-/// fits. Nothing is ever rounded.
+/// every digit and the unit: one row, split at the dot, number over unit,
+/// wrapped across two rows, then — only when `row3` is given — wrapped
+/// across three. Six fraction
+/// digits is the friendly minimum (trailing zeros are kept, never trimmed
+/// below it); the width grows only as far as needed to keep every base unit,
+/// up to all `decimals` digits. Returns `(fraction width, row 3 used)`, or
+/// `None` (rows 1-2 blanked, row 3 untouched) when no layout fits. Nothing is
+/// ever rounded.
 fn paint_exact_decimal(
     row1: &mut [u8; DISPLAY_COLS],
     row2: &mut [u8; DISPLAY_COLS],
+    row3: Option<&mut [u8; DISPLAY_COLS]>,
     value: &U256,
     decimals: u32,
     unit_bytes: &[u8],
-) -> Option<u32> {
+) -> Option<(u32, bool)> {
     if let Some(frac) = exact_fraction_digits(value, decimals, 6, decimals) {
         if single_row_amount_fixed(row1, value, decimals, frac, unit_bytes) {
             *row2 = [b' '; DISPLAY_COLS];
-            return Some(frac);
+            return Some((frac, false));
         }
         // Split at the dot. The symbol can be up to MAX_DISPLAY_FIELD = 64
         // bytes from the bundle; this layout shows only the first
@@ -1299,13 +1494,24 @@ fn paint_exact_decimal(
         if write_amount_two_rows_bytes(row1, row2, value, decimals, frac, false, unit_bytes)
             == AmountFit::Full
         {
-            return Some(frac);
+            return Some((frac, false));
+        }
+        // The whole number on row 1 and the unit on row 2, when the fraction
+        // is too long to share row 2 with the unit: `0.000014986938` / `ETH`
+        // (a Base fee worst case that otherwise reached the user in wei).
+        if write_number_over_unit(row1, row2, value, decimals, frac, unit_bytes) {
+            return Some((frac, false));
         }
         // A full-precision amount (`1234.987654321098765432 DAI`) fits neither
-        // form above: wrap it across both rows with explicit continuation
-        // marks (owner decision 2026-09-23: exact and wrapped, never rounded).
-        if write_amount_wrapped(row1, row2, value, decimals, frac, unit_bytes) == AmountFit::Full {
-            return Some(frac);
+        // form above: wrap it with explicit continuation marks (owner decision
+        // 2026-09-23: exact and wrapped, never rounded).
+        if write_amount_wrapped(row1, row2, None, value, decimals, frac, unit_bytes) == AmountFit::Full {
+            return Some((frac, false));
+        }
+        if let Some(row3) = row3 {
+            if write_amount_wrapped(row1, row2, Some(row3), value, decimals, frac, unit_bytes) == AmountFit::Full {
+                return Some((frac, true));
+            }
         }
     }
     *row1 = [b' '; DISPLAY_COLS];
@@ -1316,22 +1522,30 @@ fn paint_exact_decimal(
 /// Continuation mark ending row 1 and opening row 2 of a wrapped amount.
 pub const AMOUNT_WRAP_MARK: u8 = b'>';
 
-/// Exact decimal wrapped across two rows:
+/// Exact decimal wrapped across two rows, or three when `row3` is given:
 ///
 /// ```text
 ///   1234.9876543210>      whole part + '.' + leading fraction digits
 ///   >98765432 DAI         remaining fraction digits + full symbol
+///
+///   123456789012.34>      three rows: the middle row is '>' + up to 14
+///   >56789012345678>      digits + '>' (fewer when a long unit needs the
+///   >901234567890 SHIB    room on the last row)
 /// ```
 ///
 /// Row 1 always carries the complete whole part and the decimal point, so
-/// the magnitude is read on row 1 and row 2 can only be fraction digits —
-/// it cannot pass for a standalone amount (it opens with the mark, never a
-/// digit). Every digit of the exact fraction is shown; nothing is rounded,
-/// and the symbol is never truncated. `Overflow` (both rows blanked) when the
-/// digits or symbol do not fit.
+/// the magnitude is read on row 1 and every later row can only be fraction
+/// digits — it cannot pass for a standalone amount (it opens with the mark,
+/// never a digit). An integer (no decimal point: a decimals-0 token, raw
+/// `units`) wraps the same way, every continuation marked. Every digit of
+/// the exact fraction is shown; nothing is rounded, and the symbol is never
+/// truncated. The three-row form is used only when the digits need it.
+/// `Overflow` (rows 1-2 blanked, row 3 untouched) when the digits or symbol
+/// do not fit.
 fn write_amount_wrapped(
     row1: &mut [u8; DISPLAY_COLS],
     row2: &mut [u8; DISPLAY_COLS],
+    row3: Option<&mut [u8; DISPLAY_COLS]>,
     value: &U256,
     decimals: u32,
     frac: u32,
@@ -1350,51 +1564,107 @@ fn write_amount_wrapped(
     if formatted_collapses_to_zero(value, digits) {
         return AmountFit::Overflow;
     }
-    let Some(dot) = digits.iter().position(|&b| b == b'.') else {
-        return AmountFit::Overflow;
-    };
-    // Row 1: as many digits as fit before the mark.
+    // Row 1: as many digits as fit before the mark, and the whole part with
+    // its decimal point must all be there.
     let head = DISPLAY_COLS - 1;
-    if dot >= head || n <= head {
+    if digits.iter().position(|&b| b == b'.').is_some_and(|dot| dot >= head) || n <= head {
         return AmountFit::Overflow;
     }
-    let tail = &digits[head..];
-    if 1 + tail.len() + 1 + unit_bytes.len() > DISPLAY_COLS {
-        return AmountFit::Overflow;
+    let last_row_fits = |tail: usize| 1 + tail + usize::from(!unit_bytes.is_empty()) + unit_bytes.len() <= DISPLAY_COLS;
+    match row3 {
+        None => {
+            let tail = &digits[head..];
+            if !last_row_fits(tail.len()) {
+                return AmountFit::Overflow;
+            }
+            row1[..head].copy_from_slice(&digits[..head]);
+            row1[head] = AMOUNT_WRAP_MARK;
+            write_wrap_last_row(row2, tail, unit_bytes);
+            AmountFit::Full
+        }
+        Some(row3) => {
+            // Middle row: mark + up to 14 digits + mark, as many as leave
+            // the last row at least one digit (the fewer on the last row,
+            // the more room for the unit).
+            let rest = n - head;
+            let mid = (DISPLAY_COLS - 2).min(rest - 1);
+            if mid == 0 || !last_row_fits(rest - mid) {
+                return AmountFit::Overflow;
+            }
+            row1[..head].copy_from_slice(&digits[..head]);
+            row1[head] = AMOUNT_WRAP_MARK;
+            row2[0] = AMOUNT_WRAP_MARK;
+            row2[1..1 + mid].copy_from_slice(&digits[head..head + mid]);
+            row2[1 + mid] = AMOUNT_WRAP_MARK;
+            *row3 = [b' '; DISPLAY_COLS];
+            write_wrap_last_row(row3, &digits[head + mid..], unit_bytes);
+            AmountFit::Full
+        }
     }
-    row1[..head].copy_from_slice(&digits[..head]);
-    row1[head] = AMOUNT_WRAP_MARK;
-    row2[0] = AMOUNT_WRAP_MARK;
-    row2[1..1 + tail.len()].copy_from_slice(tail);
-    row2[1 + tail.len()] = b' ';
-    row2[2 + tail.len()..2 + tail.len() + unit_bytes.len()].copy_from_slice(unit_bytes);
-    AmountFit::Full
+}
+
+/// The complete exact number on row 1 and the complete unit on row 2.
+fn write_number_over_unit(
+    row1: &mut [u8; DISPLAY_COLS],
+    row2: &mut [u8; DISPLAY_COLS],
+    value: &U256,
+    decimals: u32,
+    frac: u32,
+    unit_bytes: &[u8],
+) -> bool {
+    *row1 = [b' '; DISPLAY_COLS];
+    *row2 = [b' '; DISPLAY_COLS];
+    if unit_bytes.is_empty() || unit_bytes.len() > DISPLAY_COLS || !amount_is_exact_at_fraction_digits(value, decimals, frac) {
+        return false;
+    }
+    let mut tmp = [0u8; 96];
+    let Some(n) = value.format_decimal(decimals, frac, false, &mut tmp) else {
+        return false;
+    };
+    if n > DISPLAY_COLS || formatted_collapses_to_zero(value, &tmp[..n]) {
+        return false;
+    }
+    row1[..n].copy_from_slice(&tmp[..n]);
+    row2[..unit_bytes.len()].copy_from_slice(unit_bytes);
+    true
+}
+
+/// The last row of a wrapped amount: mark, remaining digits, ` unit`.
+fn write_wrap_last_row(row: &mut [u8; DISPLAY_COLS], tail: &[u8], unit_bytes: &[u8]) {
+    row[0] = AMOUNT_WRAP_MARK;
+    row[1..1 + tail.len()].copy_from_slice(tail);
+    if !unit_bytes.is_empty() {
+        row[1 + tail.len()] = b' ';
+        row[2 + tail.len()..2 + tail.len() + unit_bytes.len()].copy_from_slice(unit_bytes);
+    }
 }
 
 /// Pure pre-publication check for legacy token amount sinks. It intentionally
 /// executes the real painter into scratch rows so width, unit, decimal and
 /// exactness policy cannot drift from the pages later shown to the user.
 #[must_use]
-pub fn token_amount_is_exactly_renderable(amount: &U256, meta: &Erc20Metadata<'_>) -> bool {
-    token_amount_form(amount, meta).is_some()
+pub fn token_amount_is_exactly_renderable(amount: &U256, meta: &Erc20Metadata<'_>, rows: AmountRows) -> bool {
+    token_amount_form(amount, meta, rows).is_some()
 }
 
-/// CoW swap-leg amount renderer. Formats a 32-byte big-endian amount
-/// with `decimals` applied and `symbol` appended, across up to two rows,
-/// reusing the same fixed-width (anti-spoof) machinery as the ERC-20
-/// transfer path. Keeps the `U256`/`Erc20Metadata`/`AmountFit` plumbing
-/// internal so `cowswap_display` (outside the `display` module) can call
-/// it with primitive types only.
+/// CoW swap-leg / Permit2 amount renderer. Formats a 32-byte big-endian
+/// amount with `decimals` applied and `symbol` appended, reusing the same
+/// fixed-width (anti-spoof) machinery as the ERC-20 transfer path. Keeps the
+/// `U256`/`Erc20Metadata`/`AmountFit` plumbing internal so `cowswap_display`
+/// (outside the `display` module) can call it with primitive types only.
 ///
-/// Returns `false` on overflow — the magnitude exceeds two rows — and in
-/// that case writes a "(amount too big)" marker into `row2` rather than
-/// spilling onto an un-budgeted extra page. A decoded CoW amount is
-/// astronomically unlikely to overflow (it would need ~16+ decimal
-/// digits), but failing safe keeps the page count the renderer
-/// pre-computed exact.
+/// With `row3` the amount may take a third wrapped row (see
+/// [`write_token_amount_rows`]); otherwise `row3` gets `> next`. Without it
+/// the amount has two rows.
+///
+/// Returns `false` on overflow and writes a "(amount too big)" marker into
+/// `row2` rather than spilling onto an un-budgeted extra page. Every
+/// publishing path runs the same call as a preflight first and refuses to
+/// sign on `false`, so the marker never reaches a signing screen.
 pub fn write_cow_leg_amount(
     row1: &mut [u8; DISPLAY_COLS],
     row2: &mut [u8; DISPLAY_COLS],
+    row3: Option<&mut [u8; DISPLAY_COLS]>,
     amount_be: &[u8; 32],
     decimals: u8,
     symbol: &[u8],
@@ -1407,7 +1677,17 @@ pub fn write_cow_leg_amount(
         name: &[],
         symbol,
     };
-    match write_token_amount_two_rows(row1, row2, &amount, &meta) {
+    let fit = match row3 {
+        Some(row3) => {
+            let fit = write_token_amount_rows(row1, row2, row3, &amount, &meta);
+            if fit == AmountFit::Overflow {
+                write_line(row3, "> next");
+            }
+            fit
+        }
+        None => write_token_amount_two_rows(row1, row2, &amount, &meta),
+    };
+    match fit {
         AmountFit::Full => true,
         AmountFit::Overflow => {
             *row1 = [b' '; DISPLAY_COLS];
@@ -1579,7 +1859,7 @@ mod native_amount_tests {
     use super::{
         amount_is_exact_at_fraction_digits, known_native_ticker,
         native_amount_is_exactly_renderable, write_native_amount_two_rows,
-        write_native_derived_amount_two_rows, AmountFit, DISPLAY_COLS,
+        write_native_derived_amount_two_rows, AmountFit, AmountRows, DISPLAY_COLS,
     };
     use pqsigner_tx_core::eip1559::U256;
 
@@ -1606,8 +1886,9 @@ mod native_amount_tests {
             write_native_amount_two_rows(&mut row1, &mut row2, &value, 4_242_424_242),
             AmountFit::Full
         );
-        assert_eq!(trimmed(&row1), b"1000000000000000");
-        assert_eq!(trimmed(&row2), b"000 raw");
+        // Wrapped with continuation marks, like every exact amount.
+        assert_eq!(trimmed(&row1), b"100000000000000>");
+        assert_eq!(trimmed(&row2), b">0000 raw");
     }
 
     #[test]
@@ -1663,7 +1944,7 @@ mod native_amount_tests {
                 write_native_amount_two_rows(one_wei_row1, one_wei_row2, &one_wei, chain_id),
                 AmountFit::Full
             );
-            assert!(native_amount_is_exactly_renderable(&one_wei, chain_id));
+            assert!(native_amount_is_exactly_renderable(&one_wei, chain_id, AmountRows::Two));
             assert_eq!(trimmed(&one_wei_rows[0]), b"0.0000000000000>");
             assert_eq!(trimmed(&one_wei_rows[1]), [b">00001 ".as_slice(), unit].concat().as_slice());
 
@@ -1706,7 +1987,8 @@ mod native_amount_tests {
             );
             assert!(native_amount_is_exactly_renderable(
                 &one_native_plus_one_wei,
-                chain_id
+                chain_id,
+                AmountRows::Two
             ));
             assert_eq!(trimmed(&adjacent_rows[0]), b"1.0000000000000>");
             assert_eq!(trimmed(&adjacent_rows[1]), [b">00001 ".as_slice(), unit].concat().as_slice());
@@ -1730,12 +2012,12 @@ mod native_amount_tests {
             write_native_amount_two_rows(exact_row1, exact_row2, &exact, 1),
             AmountFit::Full
         );
-        assert!(native_amount_is_exactly_renderable(&exact, 1));
+        assert!(native_amount_is_exactly_renderable(&exact, 1, AmountRows::Two));
         assert_eq!(
             write_native_amount_two_rows(next_row1, next_row2, &next, 1),
             AmountFit::Full
         );
-        assert!(native_amount_is_exactly_renderable(&next, 1));
+        assert!(native_amount_is_exactly_renderable(&next, 1, AmountRows::Two));
         assert_ne!(exact_rows, next_rows);
         assert_eq!(trimmed(&next_rows[0]), b"1.000001 ETH");
     }
@@ -1750,10 +2032,11 @@ mod native_amount_tests {
         );
         assert!(native_amount_is_exactly_renderable(
             &u256_from_u128(1),
-            4_242_424_242
+            4_242_424_242,
+            AmountRows::Two
         ));
-        assert_eq!(trimmed(&row1), b"1");
-        assert_eq!(trimmed(&row2), b"raw");
+        assert_eq!(trimmed(&row1), b"1 raw");
+        assert_eq!(trimmed(&row2), b"");
 
         assert_eq!(
             write_native_amount_two_rows(&mut row1, &mut row2, &U256([0xff; 32]), 4_242_424_242,),
@@ -1761,7 +2044,8 @@ mod native_amount_tests {
         );
         assert!(!native_amount_is_exactly_renderable(
             &U256([0xff; 32]),
-            4_242_424_242
+            4_242_424_242,
+            AmountRows::Two
         ));
     }
 
@@ -1777,7 +2061,7 @@ mod native_amount_tests {
             AmountFit::Overflow
         );
         assert_eq!([row1, row2], before);
-        assert!(!native_amount_is_exactly_renderable(&value, 1));
+        assert!(!native_amount_is_exactly_renderable(&value, 1, AmountRows::Two));
     }
 
     #[test]
@@ -2137,8 +2421,9 @@ mod chain_name_tests {
 mod amount_form_policy_tests {
     extern crate std;
     use super::{
-        native_amount_form, token_amount_form, write_native_amount_two_rows,
-        write_token_amount_two_rows, AmountFit, AmountForm, DISPLAY_COLS,
+        native_amount_form, token_amount_form, write_native_amount_rows, write_native_amount_two_rows,
+        write_token_amount_rows,
+        write_token_amount_two_rows, AmountFit, AmountForm, AmountRows, DISPLAY_COLS,
     };
     use pqsigner_tx::erc20::bundle::Erc20Metadata;
     use pqsigner_tx_core::eip1559::U256;
@@ -2219,20 +2504,42 @@ mod amount_form_policy_tests {
         std::format!("{whole}.{}", &frac[..used])
     }
 
-    /// Can ANY decimal layout of the page hold `s` and the full `unit`?
-    fn decimal_fits(s: &str, unit: &str) -> bool {
+    /// Can ANY decimal layout of `rows` page rows hold `s` and the full
+    /// (non-empty) `unit`? One row; split at the dot; number over unit;
+    /// wrapped over two rows (row 1: 15 characters + mark, holding the
+    /// point); wrapped over three (middle row: mark + up to 14 + mark).
+    fn decimal_fits(s: &str, unit: &str, rows: AmountRows) -> bool {
         let (n, u) = (s.len(), unit.len());
         let one_row = n + 1 + u <= W;
+        let number_over_unit = n <= W && u <= W;
         let split = match s.find('.') {
             Some(dot) => dot <= W && (n - dot) + 1 + u <= W,
             None => n <= W && u < W,
         };
-        let wrap = s.find('.').is_some_and(|dot| dot < W - 1 && n > W - 1 && (n - (W - 1)) + 2 + u <= W);
-        one_row || split || wrap
+        let point_on_row1 = s.find('.').is_none_or(|dot| dot < W - 1);
+        let wrap2 = point_on_row1 && n > W - 1 && (n - (W - 1)) + 2 + u <= W;
+        let wrap3 = rows == AmountRows::Three && point_on_row1 && n > W && {
+            let rest = n - (W - 1);
+            (rest - (W - 2).min(rest - 1)) + 2 + u <= W
+        };
+        one_row || split || number_over_unit || wrap2 || wrap3
     }
 
     fn trim(row: &[u8; W]) -> String {
         String::from_utf8(row.to_vec()).unwrap().trim_end().into()
+    }
+
+    /// Read the painted rows back as one `<number> <unit>` string; a third
+    /// row counts only when the second ends with the continuation mark.
+    fn read_back3(r1: &[u8; W], r2: &[u8; W], r3: &[u8; W]) -> String {
+        let (a, b, c) = (trim(r1), trim(r2), trim(r3));
+        if let (Some(head), Some(mid)) = (a.strip_suffix('>'), b.strip_suffix('>')) {
+            let mid = mid.strip_prefix('>').expect("wrapped row 2 opens with the mark");
+            let tail = c.strip_prefix('>').expect("wrapped row 3 opens with the mark");
+            return std::format!("{head}{mid}{tail}");
+        }
+        assert_eq!(c, "> next", "row 3 is the hint when the amount takes two rows");
+        read_back(r1, r2)
     }
 
     /// Read the two painted rows back as one `<number> <unit>` string.
@@ -2271,30 +2578,51 @@ mod amount_form_policy_tests {
                         name: b"Token",
                         symbol: unit.as_bytes(),
                     };
-                    let (mut r1, mut r2) = ([b' '; W], [b' '; W]);
-                    let fit = write_token_amount_two_rows(&mut r1, &mut r2, &value, &meta);
-                    let form = token_amount_form(&value, &meta);
-                    assert_eq!(fit == AmountFit::Full, form.is_some(), "{int} @{decimals} {unit}");
-                    let ctx = std::format!("{int} @{decimals} {unit}: {:?} / {:?}", trim(&r1), trim(&r2));
-                    let base_fits = unit.len() <= W - 6 && int.len() <= W;
-                    match form {
-                        Some(AmountForm::Decimal { frac }) => {
-                            assert_eq!(read_back(&r1, &r2), std::format!("{s} {unit}"), "{ctx}");
-                            assert_eq!(frac as usize, s.find('.').map_or(0, |d| s.len() - d - 1), "{ctx}");
+                    for rows in [AmountRows::Two, AmountRows::Three] {
+                        let (mut r1, mut r2, mut r3) = ([b' '; W], [b' '; W], [b' '; W]);
+                        let fit = match rows {
+                            AmountRows::Two => write_token_amount_two_rows(&mut r1, &mut r2, &value, &meta),
+                            AmountRows::Three => write_token_amount_rows(&mut r1, &mut r2, &mut r3, &value, &meta),
+                        };
+                        let form = token_amount_form(&value, &meta, rows);
+                        assert_eq!(fit == AmountFit::Full, form.is_some(), "{int} @{decimals} {unit} {rows:?}");
+                        let ctx = std::format!(
+                            "{int} @{decimals} {unit} {rows:?}: {:?} / {:?} / {:?}",
+                            trim(&r1),
+                            trim(&r2),
+                            trim(&r3)
+                        );
+                        let shown = match rows {
+                            AmountRows::Two => read_back(&r1, &r2),
+                            AmountRows::Three if form.is_some() => read_back3(&r1, &r2, &r3),
+                            AmountRows::Three => String::new(),
+                        };
+                        let base_fits = unit.len() <= W - 6 && decimal_fits(int, &std::format!("base {unit}"), rows);
+                        match form {
+                            Some(AmountForm::Decimal { frac }) => {
+                                assert_eq!(shown, std::format!("{s} {unit}"), "{ctx}");
+                                assert_eq!(frac as usize, s.find('.').map_or(0, |d| s.len() - d - 1), "{ctx}");
+                            }
+                            Some(AmountForm::BaseUnits) => {
+                                assert!(
+                                    !decimal_fits(&s, unit, rows),
+                                    "base units shown while the decimal {s} fits: {ctx}"
+                                );
+                                assert_eq!(shown, std::format!("{int} base {unit}"), "{ctx}");
+                            }
+                            None => {
+                                assert!(
+                                    !decimal_fits(&s, unit, rows) && !base_fits,
+                                    "refused although a form fits: {ctx}"
+                                );
+                            }
                         }
-                        Some(AmountForm::BaseUnits) => {
-                            assert!(!decimal_fits(&s, unit), "base units shown while the decimal {s} fits: {ctx}");
-                            assert_eq!(read_back(&r1, &r2), std::format!("{int} base {unit}"), "{ctx}");
-                        }
-                        None => {
-                            assert!(!decimal_fits(&s, unit) && !base_fits, "refused although a form fits: {ctx}");
-                        }
+                        checked += 1;
                     }
-                    checked += 1;
                 }
             }
         }
-        assert!(checked > 100_000, "corpus too small: {checked}");
+        assert!(checked > 200_000, "corpus too small: {checked}");
     }
 
     #[test]
@@ -2303,29 +2631,47 @@ mod amount_form_policy_tests {
             let value = u256(int).unwrap();
             let s = exact_decimal(int, 18);
             for (chain_id, unit) in [(1u64, "ETH"), (56, "BNB"), (137, "POL")] {
-                let (mut r1, mut r2) = ([b' '; W], [b' '; W]);
-                let fit = write_native_amount_two_rows(&mut r1, &mut r2, &value, chain_id);
-                let form = native_amount_form(&value, chain_id);
-                assert_eq!(fit == AmountFit::Full, form.is_some());
-                let ctx = std::format!("{int} wei on {chain_id}: {:?} / {:?}", trim(&r1), trim(&r2));
-                if super::known_native_ticker(chain_id) != Some(unit.as_bytes()) {
-                    continue; // ticker table changed; the ETH row still runs
-                }
-                match form {
-                    Some(AmountForm::Decimal { .. }) => {
-                        assert_eq!(read_back(&r1, &r2), std::format!("{s} {unit}"), "{ctx}");
+                for rows in [AmountRows::Two, AmountRows::Three] {
+                    let (mut r1, mut r2, mut r3) = ([b' '; W], [b' '; W], [b' '; W]);
+                    let fit = match rows {
+                        AmountRows::Two => write_native_amount_two_rows(&mut r1, &mut r2, &value, chain_id),
+                        AmountRows::Three => write_native_amount_rows(&mut r1, &mut r2, &mut r3, &value, chain_id),
+                    };
+                    let form = native_amount_form(&value, chain_id, rows);
+                    assert_eq!(fit == AmountFit::Full, form.is_some());
+                    let ctx = std::format!(
+                        "{int} wei on {chain_id} {rows:?}: {:?} / {:?} / {:?}",
+                        trim(&r1),
+                        trim(&r2),
+                        trim(&r3)
+                    );
+                    if super::known_native_ticker(chain_id) != Some(unit.as_bytes()) {
+                        continue; // ticker table changed; the ETH row still runs
                     }
-                    Some(AmountForm::BaseUnits) => {
-                        assert!(!decimal_fits(&s, unit), "wei shown while the decimal {s} fits: {ctx}");
-                        assert_eq!(read_back(&r1, &r2), std::format!("{int} wei"), "{ctx}");
+                    let shown = match rows {
+                        AmountRows::Two => read_back(&r1, &r2),
+                        AmountRows::Three if form.is_some() => read_back3(&r1, &r2, &r3),
+                        AmountRows::Three => String::new(),
+                    };
+                    match form {
+                        Some(AmountForm::Decimal { .. }) => {
+                            assert_eq!(shown, std::format!("{s} {unit}"), "{ctx}");
+                        }
+                        Some(AmountForm::BaseUnits) => {
+                            assert!(!decimal_fits(&s, unit, rows), "wei shown while the decimal {s} fits: {ctx}");
+                            assert_eq!(shown, std::format!("{int} wei"), "{ctx}");
+                        }
+                        None => assert!(
+                            !decimal_fits(&s, unit, rows) && !decimal_fits(int, "wei", rows),
+                            "refused although a form fits: {ctx}"
+                        ),
                     }
-                    None => assert!(!decimal_fits(&s, unit) && int.len() > 28, "refused although a form fits: {ctx}"),
                 }
             }
             // Unknown chain: no authenticated scale, always the raw integer.
             let (mut r1, mut r2) = ([b' '; W], [b' '; W]);
             if write_native_amount_two_rows(&mut r1, &mut r2, &value, 4_242_424_242) == AmountFit::Full {
-                assert_eq!(native_amount_form(&value, 4_242_424_242), Some(AmountForm::BaseUnits));
+                assert_eq!(native_amount_form(&value, 4_242_424_242, AmountRows::Two), Some(AmountForm::BaseUnits));
                 assert_eq!(read_back(&r1, &r2), std::format!("{int} raw"));
             }
         }

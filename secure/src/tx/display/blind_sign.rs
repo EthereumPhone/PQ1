@@ -13,7 +13,7 @@ use sha2::{Digest, Sha256};
 
 use super::primitives::{
     build_legacy_fee_pages, write_addr_full_or_name, write_calldata_hash_rows, write_chain,
-    write_data_len_row, write_line, write_native_amount_two_rows, write_native_currency_row,
+    write_data_len_row, write_line, write_native_amount_rows, write_native_currency_row,
     write_nonce_row, write_selector_row, AmountFit,
 };
 use super::Pages;
@@ -95,19 +95,16 @@ pub fn render_blind_sign_pages(
         write_native_currency_row(&mut pages.buf[next_page][0], b"Value: 0 ", tx.chain_id, b"");
         write_line(&mut pages.buf[next_page][1], "");
         write_line(&mut pages.buf[next_page][2], "");
+        write_line(&mut pages.buf[next_page][3], "> next");
     } else {
         write_line(&mut pages.buf[next_page][0], "! VALUE:");
         let [_lbl, r1, r2, foot] = &mut pages.buf[next_page];
-        let fit = write_native_amount_two_rows(r1, r2, &tx.value, tx.chain_id);
-        write_line(
-            foot,
-            match fit {
-                AmountFit::Full => "> next",
-                AmountFit::Overflow => "!AMOUNT OVERFLOW",
-            },
-        );
+        // Rows 1-2 and `> next`, or rows 1-3 when only a third wrapped row
+        // holds every digit.
+        if write_native_amount_rows(r1, r2, foot, &tx.value, tx.chain_id) == AmountFit::Overflow {
+            write_line(foot, "!AMOUNT OVERFLOW");
+        }
     }
-    write_line(&mut pages.buf[next_page][3], "> next");
     next_page += 1;
 
     // ── Selector + data length ──────────────────────────────────────

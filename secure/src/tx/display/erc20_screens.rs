@@ -14,15 +14,16 @@
 //! (WETH) or the placeholder ramp of its symbol; the unknown token the
 //! placeholder ramp hashed from its contract address (DESIGN.md § Color).
 
+use super::primitives::AmountRows;
 use super::screen_kit::{
-    addr42, address_look, caption_fits, raw_units, token_amount_as_page, token_look, wrap, BodyReceipt, Emit, Text,
+    addr42, address_look, caption_fits, raw_units, token_amount_as_page, token_look, BodyReceipt, Emit, Text,
 };
 use super::userop_screens::{emit_fee_and_details, Family};
 use crate::erc20::bundle::Erc20Metadata;
 use crate::erc20::calldata::{is_unlimited_amount, Erc20Call};
 use crate::names::NameResolver;
 use crate::tx::eip1559::{Eip1559Tx, U256};
-use pqsigner_ui_px::fit::{fit_tier, layout_address, Region};
+use pqsigner_ui_px::fit::{fit_tier, layout_address, layout_amount_or_wrap, Region};
 use pqsigner_ui_px::{Icon, Look, Screens, Weight};
 
 fn amount_of(call: &Erc20Call) -> U256 {
@@ -97,7 +98,7 @@ fn known_hero(e: &mut Emit<'_>, call: &Erc20Call, meta: &Erc20Metadata<'_>) -> R
     };
     let with_amount = matches!(call, Erc20Call::Transfer { .. } | Erc20Call::TransferFrom { .. });
     if with_amount {
-        if let Some(a) = token_amount_as_page(&amount, meta) {
+        if let Some(a) = token_amount_as_page(&amount, meta, AmountRows::Three) {
             let t = Text::new().push(verb).push(a.digits()).push(b" ").push(a.unit()).push(b"?");
             if t.ok() && caption_fits(t.as_bytes()) {
                 return e.hero(id, t.as_bytes());
@@ -135,7 +136,7 @@ pub(crate) fn emit_known(
     if matches!(call, Erc20Call::Approve { .. }) && is_unlimited_amount(&amount) {
         e.detail(b"AMOUNT", label, &[(b"unlimited", Weight::Regular)], true)?;
     } else {
-        let amt = token_amount_as_page(&amount, meta).ok_or(())?;
+        let amt = token_amount_as_page(&amount, meta, AmountRows::Three).ok_or(())?;
         e.amount(b"AMOUNT", label, &amt, false)?;
     }
 
@@ -196,10 +197,12 @@ pub(crate) fn emit_unknown(
     } else if matches!(call, Erc20Call::Approve { .. }) && amount.is_zero() {
         e.detail(b"AMOUNT", b"AMOUNT", &[(head.as_bytes(), Weight::Regular), (b"Revoke approval", Weight::Regular)], false)?;
     } else {
+        // Every digit; a wrapped number carries continuation marks on every
+        // line, so no line reads as a number of its own.
         let amt = raw_units(&amount).ok_or(())?;
-        match wrap(amt.digits(), Region::Docked) {
-            Some(w) if w.n <= 2 => {
-                let l = w.as_slice();
+        match layout_amount_or_wrap(amt.digits(), b"", Region::Docked) {
+            Ok(lay) if lay.n <= 2 => {
+                let l = lay.as_slice();
                 let mut lines: [(&[u8], Weight); 3] = [(head.as_bytes(), Weight::Regular); 3];
                 for (i, line) in l.iter().enumerate() {
                     lines[1 + i] = (line.as_bytes(), Weight::Regular);
@@ -207,15 +210,12 @@ pub(crate) fn emit_unknown(
                 e.detail(b"AMOUNT", b"AMOUNT", &lines[..1 + l.len()], false)?;
             }
             _ => {
-                let w = wrap(amt.digits(), Region::Full).ok_or(())?;
-                if w.n > 3 {
-                    return Err(());
-                }
+                let lay = layout_amount_or_wrap(amt.digits(), b"", Region::Full).map_err(|_| ())?;
                 let mut lines: [(&[u8], Weight); 3] = [(b"", Weight::Regular); 3];
-                for (i, line) in w.as_slice().iter().enumerate() {
+                for (i, line) in lay.as_slice().iter().enumerate() {
                     lines[i] = (line.as_bytes(), Weight::Regular);
                 }
-                e.value(b"AMOUNT", b"RAW AMOUNT", &lines[..w.n])?;
+                e.value(b"AMOUNT", b"RAW AMOUNT", &lines[..usize::from(lay.n)])?;
             }
         }
     }

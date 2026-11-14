@@ -1080,8 +1080,9 @@ fn production_celo_lockedgold_proxy_renders_and_binds_all_six_routes() {
     )
     .expect("the adjacent target-share base unit renders exactly");
     let adjacent_rows = page_strs(&adjacent, find_page_by_label(&adjacent, "Target Share %"));
-    assert_eq!(adjacent_rows[1], "25.0000000000000");
-    assert_eq!(adjacent_rows[2], "000000001 %");
+    // Wrapped with continuation marks (2026-11-14), every digit kept.
+    assert_eq!(adjacent_rows[1], "25.000000000000>");
+    assert_eq!(adjacent_rows[2], ">0000000001 %");
     assert_ne!(delegate.as_slice(), adjacent.as_slice());
 
     let mut dirty_delegatee = abi_address_word(delegatee);
@@ -1840,9 +1841,9 @@ fn production_midas_mtbill_deposit_routes_are_operand_complete_and_exactly_scope
         let adjacent = render_with(&adjacent_words, &signer)
             .expect("the adjacent signed base unit renders exactly");
         let (label, expected_row1, expected_row2) = if word_index == 1 {
-            ("Payment Amount", "2.00000000000000", "0001 token")
+            ("Payment Amount", "2.0000000000000>", ">00001 token")
         } else {
-            ("Minimum mTBILL", "1.90000000000000", "0001 mTBILL")
+            ("Minimum mTBILL", "1.9000000000000>", ">00001 mTBILL")
         };
         let adjacent_rows = page_strs(&adjacent.pages, find_page_by_label(&adjacent.pages, label));
         assert_eq!(adjacent_rows[1], expected_row1);
@@ -3812,9 +3813,11 @@ fn direct_erc7730_dispatch_uses_its_exact_fee_renderer() {
     let amount = u256_from_u64(100_000_000);
     let calldata = calldata_transfer([0x33u8; 20], amount);
     let mut tx = envelope(1, entry.contract);
-    tx.max_fee_per_gas = u256_from_u128(123_456_789_012u128 * 1_000_000_000);
+    // Since 2026-11-14 the legacy envelope also renders any fee whose gwei
+    // fits a full row; a gas limit of 10^9 still exceeds its `(gas: N)` row.
+    tx.max_fee_per_gas = u256_from_u64(1_000_000_000);
     tx.max_priority_fee_per_gas = U256::default();
-    tx.gas_limit = 21_000;
+    tx.gas_limit = 1_000_000_000;
     assert!(
         !legacy_fee_rows_are_exactly_renderable(
             &tx.max_fee_per_gas,
@@ -3860,8 +3863,8 @@ fn direct_erc7730_dispatch_uses_its_exact_fee_renderer() {
             .take(pages.len)
             .flatten()
             .map(|row| String::from_utf8_lossy(row).trim().to_owned())
-            .any(|row| row == "123456789012"),
-        "the selected ERC-7730 painter must publish the exact max-fee value"
+            .any(|row| row == "Gas:1000000000"),
+        "the selected ERC-7730 painter must publish the exact gas limit"
     );
 }
 
@@ -5341,9 +5344,10 @@ fn positive_weth_deposit_and_withdraw_bind_exact_amounts() {
             find_page_by_label(&half_withdraw_pages, "Amount"),
         )
         .join(" ");
+        // Whitespace and `>` continuation marks removed: the digits read whole.
         let amount_compact: String = amount_rows
             .chars()
-            .filter(|character| !character.is_ascii_whitespace())
+            .filter(|character| !character.is_ascii_whitespace() && *character != '>')
             .collect();
         if chain_id == 1 {
             assert!(
@@ -6314,7 +6318,7 @@ fn positive_p2p_stakewise_deposits_bind_receiver_referrer_and_native_value() {
             &rendered.pages,
             find_page_by_label(&rendered.pages, "Amount to depos~"),
         );
-        let amount_text = amount_rows.concat();
+        let amount_text = amount_rows.concat().replace('>', "");
         if chain_id == 1 {
             assert!(
                 amount_text.contains("1.5") && amount_text.contains("ETH"),
@@ -11466,13 +11470,13 @@ fn v3_permit_batch_array_renders_both_elements() {
     assert_all_pages_printable(&pages);
     let dump = dump_pages(&pages).to_lowercase();
     // Both element amounts render (raw, no token metadata → `! raw, dec=?`; a
-    // 19-digit value splits across two display rows, so match the leading run).
+    // 19-digit value wraps across two display rows with `>` marks).
     assert!(
         dump.contains("1000000000"),
         "element 0 (USDC 1e9) amount:\n{dump}"
     );
     assert!(
-        dump.contains("5000000000000000"),
+        dump.contains("500000000000000>") && dump.contains(">0000"),
         "element 1 (WETH 5e18) amount:\n{dump}"
     );
     // Distinct token addresses (unverified pages) prove per-element resolution.
@@ -13764,8 +13768,8 @@ fn production_quickswap_add_liquidity_mutations_change_transcript_exactly() {
     )
     .expect("2 POL plus one wei renders exactly");
     let maximum_rows = quickswap_rows_with_label(&adjacent_value.pages, "Maximum to Add");
-    assert_eq!(maximum_rows[0][1], "2.00000000000000");
-    assert_eq!(maximum_rows[0][2], "0001 POL");
+    assert_eq!(maximum_rows[0][1], "2.0000000000000>");
+    assert_eq!(maximum_rows[0][2], ">00001 POL");
     assert_ne!(baseline.pages.as_slice(), adjacent_value.pages.as_slice());
     assert!(!baseline
         .transcript_receipt

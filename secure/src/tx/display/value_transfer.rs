@@ -20,7 +20,7 @@
 
 use super::primitives::{
     build_legacy_fee_pages, write_addr_full_or_name, write_chain, write_data_len_row, write_line,
-    write_native_amount_two_rows, write_native_currency_row, write_nonce_row, AmountFit,
+    write_native_amount_rows, write_native_currency_row, write_nonce_row, AmountFit,
 };
 use super::Pages;
 use crate::names::NameResolver;
@@ -50,18 +50,14 @@ pub fn render_pages(tx: &Eip1559Tx, resolver: &NameResolver<'_>) -> Pages {
         write_line(&mut pages.buf[1][1], "(contract create)");
     }
 
-    // ── Page 2: Value (2-row amount) ────────────────────────────────
+    // ── Page 2: Value (2-row amount, 3 when only a third wrapped row ──
+    //    holds every digit) ─────────────────────────────────────────
     write_line(&mut pages.buf[2][0], "Value:");
     {
         let [_lbl, r1, r2, foot] = &mut pages.buf[2];
-        let fit = write_native_amount_two_rows(r1, r2, &tx.value, tx.chain_id);
-        write_line(
-            foot,
-            match fit {
-                AmountFit::Full => "> next",
-                AmountFit::Overflow => "!AMOUNT OVERFLOW",
-            },
-        );
+        if write_native_amount_rows(r1, r2, foot, &tx.value, tx.chain_id) == AmountFit::Overflow {
+            write_line(foot, "!AMOUNT OVERFLOW");
+        }
     }
 
     // ── Pages 3-4: exact max/tip and worst-case fee envelope ────────

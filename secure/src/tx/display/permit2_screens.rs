@@ -20,6 +20,7 @@ use super::permit2::{
     amount_kind, amount_verb, kind_line, permit2_body_pages, word_as_date, word_as_short_decimal, AmountKind,
     MAX_DATE_SECS,
 };
+use super::primitives::AmountRows;
 use super::screen_kit::{addr42, address_look, caption_fits, token_amount_as_page, token_look, wrap, BodyReceipt, Emit, Text};
 use super::userop_screens::Family;
 use crate::erc20::bundle::Erc20Metadata;
@@ -171,7 +172,7 @@ fn emit_token(e: &mut Emit<'_>, c: &Permit2Core, i: usize, leg: &CowLeg) -> Resu
                 )?,
                 None => {
                     let meta = Erc20Metadata { chain_id: 0, contract: [0u8; 20], decimals: *decimals, name: &[], symbol: sym };
-                    let amt = token_amount_as_page(&U256(entry.amount), &meta).ok_or(())?;
+                    let amt = token_amount_as_page(&U256(entry.amount), &meta, AmountRows::Three).ok_or(())?;
                     e.amount(IDS_AMT[i], label.as_bytes(), &amt, kind == AmountKind::Revoke)?;
                 }
             }

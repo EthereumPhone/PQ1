@@ -15,6 +15,7 @@
 use sha2::{Digest, Sha256};
 
 use super::primitives::native_ticker;
+use super::primitives::AmountRows;
 use super::screen_kit::{address_look, native_amount, wrap, BodyReceipt, Emit, Text};
 use super::userop_screens::{emit_fee_and_details, Family};
 use crate::names::NameResolver;
@@ -100,7 +101,7 @@ pub(crate) fn emit(
         let z = Text::new().push(b"0 ").push(native_ticker(tx.chain_id));
         e.detail(b"AMOUNT", b"AMOUNT", &[(z.as_bytes(), Weight::Regular)], false)?;
     } else {
-        let amt = native_amount(&tx.value, tx.chain_id).ok_or(())?;
+        let amt = native_amount(&tx.value, tx.chain_id, AmountRows::Three).ok_or(())?;
         e.amount(b"AMOUNT", b"! VALUE", &amt, true)?;
     }
 

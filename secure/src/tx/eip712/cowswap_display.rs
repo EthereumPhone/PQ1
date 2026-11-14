@@ -94,6 +94,7 @@ pub fn amounts_are_exactly_renderable(canonical: &[u8; 204], sell: &CowLeg, buy:
     fn leg_fits(amount: &[u8; 32], leg: &CowLeg) -> bool {
         let mut row1 = [b' '; DISPLAY_COLS];
         let mut row2 = [b' '; DISPLAY_COLS];
+        let mut row3 = [b' '; DISPLAY_COLS];
         match leg {
             CowLeg::Decoded {
                 decimals,
@@ -103,6 +104,7 @@ pub fn amounts_are_exactly_renderable(canonical: &[u8; 204], sell: &CowLeg, buy:
             } => crate::tx::display::primitives::write_cow_leg_amount(
                 &mut row1,
                 &mut row2,
+                Some(&mut row3),
                 amount,
                 *decimals,
                 &symbol[..*symbol_len as usize],
@@ -125,6 +127,7 @@ pub fn amounts_are_exactly_renderable(canonical: &[u8; 204], sell: &CowLeg, buy:
             } => crate::tx::display::primitives::write_cow_leg_amount(
                 &mut row1,
                 &mut row2,
+                None,
                 amount,
                 *decimals,
                 &symbol[..*symbol_len as usize],
@@ -132,6 +135,7 @@ pub fn amounts_are_exactly_renderable(canonical: &[u8; 204], sell: &CowLeg, buy:
             CowLeg::AddrHex => crate::tx::display::primitives::write_cow_leg_amount(
                 &mut row1,
                 &mut row2,
+                None,
                 amount,
                 0,
                 &[],
@@ -263,9 +267,17 @@ pub fn append_order_body_pages(
         canonical[OFF_VALID_TO + 2],
         canonical[OFF_VALID_TO + 3],
     ]);
-    write_u32_row(&mut pages.row_mut(p, 1), "unix ", valid_to);
-    write_partial_row(&mut pages.row_mut(p, 2), canonical[OFF_PARTIAL]);
-    write_line(&mut pages.row_mut(p, 3), "> next");
+    // A date, never a bare unix integer (2026-11-14). `validTo` is a u32, so
+    // every value is a real date (at most 2106-02-07) and always renders.
+    {
+        let [_, date, time, partial] = pages.page_mut(p);
+        let _ = pqsigner_erc7730::display::render::formatters::format_iso8601_utc(
+            u64::from(valid_to),
+            date,
+            time,
+        );
+        write_partial_row(partial, canonical[OFF_PARTIAL]);
+    }
     p += 1;
 
     // ── Fee (in sell token) + balance kinds ──────────────────────────
@@ -302,6 +314,7 @@ pub fn append_order_body_pages(
                 crate::tx::display::primitives::write_cow_leg_amount(
                     &mut head[1],
                     &mut tail[0],
+                    None,
                     &fee,
                     *decimals,
                     &symbol[..*symbol_len as usize],
@@ -311,6 +324,7 @@ pub fn append_order_body_pages(
                 crate::tx::display::primitives::write_cow_leg_amount(
                     &mut head[1],
                     &mut tail[0],
+                    None,
                     &fee,
                     0,
                     &[],
@@ -363,23 +377,23 @@ fn append_leg(
             name,
             name_len,
         } => {
-            // Page A: label / amount (2 rows) / "> next".
+            // Page A: label / amount (2 rows, 3 when only a third wrapped
+            // row holds every digit) / "> next".
             write_line(&mut pages.row_mut(p, 0), leg_label(kind, side));
             let amount: [u8; 32] = canonical[amount_off..amount_off + 32]
                 .try_into()
                 .expect("32-byte slice");
             {
-                let page = pages.page_mut(p);
-                let (head, tail) = page.split_at_mut(2);
+                let [_, r1, r2, r3] = pages.page_mut(p);
                 crate::tx::display::primitives::write_cow_leg_amount(
-                    &mut head[1],
-                    &mut tail[0],
+                    r1,
+                    r2,
+                    Some(r3),
                     &amount,
                     *decimals,
                     &symbol[..*symbol_len as usize],
                 );
             }
-            write_line(&mut pages.row_mut(p, 3), "> next");
             // Page B: token name (row 0) + the FULL 20-byte token contract
             // address (rows 1-3). The address is the anti-DB-spoof backstop
             // against a symbol-only collision (two "USDC" rows pointing at
@@ -562,18 +576,6 @@ fn write_addr_full_three_rows(
         row3[i * 2] = hex_nibble(b >> 4);
         row3[i * 2 + 1] = hex_nibble(b & 0x0f);
     }
-}
-
-fn write_u32_row(row: &mut [u8; DISPLAY_COLS], prefix: &str, value: u32) {
-    *row = [b' '; DISPLAY_COLS];
-    let p = prefix.as_bytes();
-    let n = core::cmp::min(p.len(), DISPLAY_COLS);
-    row[..n].copy_from_slice(&p[..n]);
-    let mut tmp = [0u8; 16];
-    let k = format_u64_decimal(value as u64, &mut tmp);
-    let off = n;
-    let copy = core::cmp::min(k, DISPLAY_COLS - off);
-    row[off..off + copy].copy_from_slice(&tmp[..copy]);
 }
 
 fn write_partial_row(row: &mut [u8; DISPLAY_COLS], partial: u8) {

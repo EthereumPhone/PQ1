@@ -17,7 +17,7 @@
 
 use super::primitives::{
     build_legacy_fee_pages, write_addr_full_or_name, write_chain, write_erc20_header, write_line,
-    write_native_currency_row, write_nonce_row, write_token_amount_two_rows, write_token_name,
+    write_native_currency_row, write_nonce_row, write_token_amount_rows, write_token_name,
     AmountFit,
 };
 use super::Pages;
@@ -96,14 +96,11 @@ pub fn render_erc20_known_pages(
         write_line(&mut pages.buf[p][3], "> next");
     } else {
         let [_lbl, r1, r2, foot] = &mut pages.buf[p];
-        let fit = write_token_amount_two_rows(r1, r2, &amount, meta);
-        write_line(
-            foot,
-            match fit {
-                AmountFit::Full => "> next",
-                AmountFit::Overflow => "!AMOUNT OVERFLOW",
-            },
-        );
+        // Rows 1-2 and `> next`, or rows 1-3 when only a third wrapped row
+        // holds every digit.
+        if write_token_amount_rows(r1, r2, foot, &amount, meta) == AmountFit::Overflow {
+            write_line(foot, "!AMOUNT OVERFLOW");
+        }
     }
     p += 1;
 

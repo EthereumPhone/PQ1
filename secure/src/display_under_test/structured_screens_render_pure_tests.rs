@@ -121,7 +121,7 @@ fn cow_direct_decoded_screens() {
     assert_eq!(ids[..8], ["SIGN", "NETWORK", "ORDER", "SELL", "SELLTOK", "BUY", "BUYTOK", "CONFIRM"], "{ids:?}");
     let text = screen_text(&l.screens);
     assert!(text.contains("Wrapped Ether") && text.contains("USD Coin"), "{text}");
-    check("cowswap", "swap", &l, MAINNET, "cow", "8dec40422069f258dc0c0ea6c1c9887bd0249db978eb4eaaa9728ff196d89b16");
+    check("cowswap", "swap", &l, MAINNET, "cow", "699ebc165dc12c130c7ae41239053ef277eb5c6eb060c65304693c4ea810c5ea");
 }
 
 /// Regression, Ambire NEXT on Base 2026-11-14: a CoW sell of
@@ -153,7 +153,7 @@ fn cow_direct_address_mode_screens() {
         assert!(ids.iter().any(|i| i == want), "{want} missing from {ids:?}");
     }
     assert_eq!(ids[3..8], ["SELLTOK", "SELLAMT", "BUYTOK", "BUYAMT", "CONFIRM"], "{ids:?}");
-    check("cowswap", "address_mode", &l, MAINNET, "cow", "33cb8120d9cc40f90ba237bdac98b2591eb909af45e9d96e18b7b85927d73ab5");
+    check("cowswap", "address_mode", &l, MAINNET, "cow", "a97f475a980d451921cfc0c0fed05672d18a817f3a12189ea2c4c6a21fdd0c6e");
 }
 
 #[test]
@@ -573,7 +573,7 @@ fn offchain_safe_tx_cow_presign_screens() {
     for want in ["BUYAMT", "RECEIVER", "EXPIRES", "FEE", "APPDATA", "TXINFO"] {
         assert!(ids(&l.screens)[..at].iter().any(|i| i == want), "{want} after the Confirm?");
     }
-    check("eip1271", "safe_tx_cow_presign", &l, 1, "safe_offchain", "66a7d42a50d2ffe7c14863b0f17f210bf7f132641da0e448278ad807e4a70e6c");
+    check("eip1271", "safe_tx_cow_presign", &l, 1, "safe_offchain", "095a23a5005cb4cfca74b998d345351b7e1faa73158ec2642d3ec3de5d7a9b39");
 }
 
 fn lift_cow_offchain(v3: &VerifiedCowswapV3) -> Lifted {
@@ -599,7 +599,7 @@ fn offchain_cow_order_screens() {
     for want in ["SELL", "BUY", "RECEIVER", "EXPIRES", "FEE", "SOURCES", "APPDATA"] {
         assert!(ids(&l.screens)[..at].iter().any(|i| i == want), "{want} after the Confirm?");
     }
-    check("eip1271", "cow_order", &l, MAINNET, "cow_offchain", "3d7c59c6191532ba2a4e07b6c1258451c4130246f5c1a4a3038ef11464c09e35");
+    check("eip1271", "cow_order", &l, MAINNET, "cow_offchain", "48cbd4ed08b421cf686af550feb3ae21b4a9b3bdc8eea4551732d45d281fe6c9");
 }
 
 #[test]
@@ -612,7 +612,7 @@ fn offchain_cow_order_zero_receiver_names_this_wallet() {
     assert!(super::safe_screens_render_pure_tests::screen_text(&l.screens).contains("RECEIVER"));
     let legacy = (0..l.pages.len).any(|i| l.pages.buf[i][1].starts_with(b"(= this wallet)"));
     assert!(legacy, "the page painter names this wallet too");
-    check("eip1271", "cow_order_zero_receiver", &l, MAINNET, "cow_offchain", "f5db3c306c246b14178eb040515c89c71c39460ddacf90238b3724bf2520ed24");
+    check("eip1271", "cow_order_zero_receiver", &l, MAINNET, "cow_offchain", "2e0542a8f3b160caa9f8fa4da875ca55ed8a21e5739e8d3efa5f609212c8f741");
 }
 
 // ---------------------------------------------------------------------------

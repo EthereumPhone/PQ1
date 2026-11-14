@@ -1136,7 +1136,11 @@ fn pick_sign_pages_inner(
                         matches!(&call, crate::erc20::calldata::Erc20Call::Approve { .. })
                             && crate::erc20::calldata::is_unlimited_amount(amount);
                     if !unlimited_approve
-                        && !super::primitives::token_amount_is_exactly_renderable(amount, meta)
+                        && !super::primitives::token_amount_is_exactly_renderable(
+                            amount,
+                            meta,
+                            super::primitives::AmountRows::Three,
+                        )
                     {
                         return Err(());
                     }

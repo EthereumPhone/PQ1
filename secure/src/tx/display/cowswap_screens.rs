@@ -14,12 +14,13 @@
 //! A decoded leg is its amount in the verified symbol plus the token's name
 //! over its FULL contract address (the page's anti-DB-spoof backstop); an
 //! undecoded leg is the full address plus the raw uint256 amount word.
-//! Amounts use the page painter's own representation
-//! (`write_token_amount_two_rows`: widened exact fraction, wrapped if it
-//! needs both rows, labelled base units only as the last resort), so a value
-//! the page renders exactly is rendered exactly here.
+//! Amounts use the page painter's own policy (`token_amount_form` with the
+//! same `AmountRows` the page leg has: exact decimal, wrapped with marks if
+//! it needs more than one row, labelled base units only as the last resort),
+//! so a value the page renders exactly is rendered exactly here.
 
-use super::screen_kit::{addr42, raw_units, token_amount_as_page, wrap, BodyReceipt, Emit, Text};
+use super::primitives::AmountRows;
+use super::screen_kit::{addr42, raw_units, token_amount_as_page, wrap, BodyReceipt, Emit};
 use super::userop_screens::Family;
 use crate::erc20::bundle::Erc20Metadata;
 use crate::tx::eip1559::U256;
@@ -81,8 +82,9 @@ pub(crate) fn order_body_screens(sell: &CowLeg, buy: &CowLeg) -> usize {
     leg_screens(sell) + leg_screens(buy) + 1 /* receiver */ + 1 /* expires */ + 1 /* fee */ + 1 /* sources */ + 1 /* appData */
 }
 
-/// A leg amount in the page painter's representation.
-fn leg_amount(amount: &U256, decimals: u8, symbol: &[u8]) -> Option<super::screen_kit::Amount> {
+/// A leg (three page rows) or fee (two) amount in the page painter's
+/// representation.
+fn leg_amount(amount: &U256, decimals: u8, symbol: &[u8], rows: AmountRows) -> Option<super::screen_kit::Amount> {
     let meta = Erc20Metadata {
         chain_id: 0,
         contract: [0u8; 20],
@@ -90,7 +92,7 @@ fn leg_amount(amount: &U256, decimals: u8, symbol: &[u8]) -> Option<super::scree
         name: &[],
         symbol,
     };
-    token_amount_as_page(amount, &meta)
+    token_amount_as_page(amount, &meta, rows)
 }
 
 fn emit_leg(e: &mut Emit<'_>, c: &[u8; 204], leg: &CowLeg, sell: bool) -> Result<(), ()> {
@@ -112,7 +114,7 @@ fn emit_leg(e: &mut Emit<'_>, c: &[u8; 204], leg: &CowLeg, sell: bool) -> Result
     let token = layout_address(&addr42(&addr_at(c, tok_off)));
     match leg {
         CowLeg::Decoded { decimals, symbol, symbol_len, name, name_len } => {
-            let amt = leg_amount(&amount, *decimals, &symbol[..usize::from(*symbol_len)]).ok_or(())?;
+            let amt = leg_amount(&amount, *decimals, &symbol[..usize::from(*symbol_len)], AmountRows::Three).ok_or(())?;
             e.amount(if sell { b"SELL" } else { b"BUY" }, label, &amt, false)?;
             // The token: its verified name over the FULL contract address —
             // on one page when both fit, else the name, then the address
@@ -166,14 +168,26 @@ pub(crate) fn emit_order_body(e: &mut Emit<'_>, v3: &VerifiedCowswapV3, owner_la
         }
     }
     let valid_to = u32::from_be_bytes([c[OFF_VALID_TO], c[OFF_VALID_TO + 1], c[OFF_VALID_TO + 2], c[OFF_VALID_TO + 3]]);
-    let exp = Text::new().push(b"unix ").push_u64(u64::from(valid_to));
+    // The page's own date rows (`YYYY-MM-DD`, `HH:MM:SS UTC`): one formatter
+    // for both, never a bare unix integer.
+    let (mut date, mut time) = ([b' '; crate::ui::DISPLAY_COLS], [b' '; crate::ui::DISPLAY_COLS]);
+    if !pqsigner_erc7730::display::render::formatters::format_iso8601_utc(u64::from(valid_to), &mut date, &mut time) {
+        return Err(());
+    }
+    let trim = |r: &[u8; crate::ui::DISPLAY_COLS]| r.iter().rposition(|&b| b != b' ').map_or(0, |i| i + 1);
+    let (dn, tn) = (trim(&date), trim(&time));
     let partial: &[u8] = if c[OFF_PARTIAL] == 0 { b"Partial: no" } else { b"Partial: yes" };
-    e.detail(b"EXPIRES", b"EXPIRES", &[(exp.as_bytes(), Weight::Regular), (partial, Weight::Regular)], false)?;
+    e.detail(
+        b"EXPIRES",
+        b"EXPIRES",
+        &[(&date[..dn], Weight::Regular), (&time[..tn], Weight::Regular), (partial, Weight::Regular)],
+        false,
+    )?;
     // Fee in the sell token, full magnitude (a huge fee is a drain).
     let fee = U256(word_at(c, OFF_FEE_AMOUNT));
     let fee_amt = match &v3.sell {
         CowLeg::Decoded { decimals, symbol, symbol_len, .. } => {
-            leg_amount(&fee, *decimals, &symbol[..usize::from(*symbol_len)])
+            leg_amount(&fee, *decimals, &symbol[..usize::from(*symbol_len)], AmountRows::Two)
         }
         CowLeg::AddrHex => raw_units(&fee),
     }

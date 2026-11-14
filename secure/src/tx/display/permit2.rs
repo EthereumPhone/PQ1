@@ -103,7 +103,8 @@ pub fn permit2_amounts_are_exactly_renderable(v: &VerifiedPermit2) -> bool {
             CowLeg::Decoded { decimals, symbol, symbol_len, .. } => {
                 let mut r1 = [b' '; DISPLAY_COLS];
                 let mut r2 = [b' '; DISPLAY_COLS];
-                write_cow_leg_amount(&mut r1, &mut r2, &e.amount, *decimals, &symbol[..usize::from(*symbol_len)])
+                let mut r3 = [b' '; DISPLAY_COLS];
+                write_cow_leg_amount(&mut r1, &mut r2, Some(&mut r3), &e.amount, *decimals, &symbol[..usize::from(*symbol_len)])
             }
             // Shown as the full word: exact by construction.
             CowLeg::AddrHex => true,
@@ -269,25 +270,28 @@ pub fn render_permit2_offchain_pages(
             CowLeg::Decoded { decimals, symbol, symbol_len, name, name_len } => {
                 ordinal_label(pages.row_mut(p, 0), verb, i, n);
                 {
-                    let [_, r1, r2, _] = pages.page_mut(p);
+                    let [_, r1, r2, r3] = pages.page_mut(p);
                     let sym = &symbol[..usize::from(*symbol_len)];
                     match kind {
                         AmountKind::Unlimited => {
                             write_line(r1, "Unlimited");
                             write_bytes(r2, sym);
+                            write_line(r3, "> next");
                         }
                         AmountKind::AnyAmount => {
                             write_line(r1, "Any amount");
                             write_bytes(r2, sym);
+                            write_line(r3, "> next");
                         }
                         AmountKind::Revoke | AmountKind::Value => {
-                            if !write_cow_leg_amount(r1, r2, &e.amount, *decimals, sym) {
+                            // Rows 1-2 (3 when only a third wrapped row
+                            // holds every digit); row 3 `> next` otherwise.
+                            if !write_cow_leg_amount(r1, r2, Some(r3), &e.amount, *decimals, sym) {
                                 return Err(());
                             }
                         }
                     }
                 }
-                write_line(pages.row_mut(p, 3), "> next");
                 write_bytes(pages.row_mut(p + 1, 0), &name[..usize::from(*name_len)]);
                 {
                     let [_, a, b, d] = pages.page_mut(p + 1);

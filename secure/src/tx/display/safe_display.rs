@@ -77,9 +77,9 @@
 
 use super::primitives::{
     format_u64, write_addr_full_or_name, write_calldata_hash_rows, write_chain, write_data_len_row,
-    write_erc20_header, write_gas, write_line, write_native_amount_two_rows,
+    write_erc20_header, write_gas, write_line, write_native_amount_rows,
     write_native_currency_row, write_native_derived_amount_two_rows, write_selector_row,
-    write_token_amount_two_rows, write_token_name, AmountFit,
+    write_token_amount_rows, write_token_amount_two_rows, write_token_name, AmountFit, AmountRows,
 };
 use super::safe_mgmt::{
     classify_safe_mgmt, page_count as safe_mgmt_page_count, render_safe_mgmt_pages, SafeMgmtOp,
@@ -300,7 +300,7 @@ fn erc20_call_amount_is_exactly_renderable(call: &Erc20Call, meta: &Erc20Metadat
         | Erc20Call::Approve { amount, .. } => amount,
     };
     (matches!(call, Erc20Call::Approve { .. }) && is_unlimited_amount(amount))
-        || super::primitives::token_amount_is_exactly_renderable(amount, meta)
+        || super::primitives::token_amount_is_exactly_renderable(amount, meta, AmountRows::Three)
 }
 
 /// Pre-publication exactness proof for every native or metadata-scaled legacy
@@ -323,7 +323,7 @@ fn legacy_values_are_exactly_renderable(
 
     let inner_value = U256(input.value);
     if !inner_value.is_zero()
-        && !super::primitives::native_amount_is_exactly_renderable(&inner_value, input.chain_id)
+        && !super::primitives::native_amount_is_exactly_renderable(&inner_value, input.chain_id, AmountRows::Three)
     {
         return false;
     }
@@ -356,7 +356,7 @@ fn legacy_values_are_exactly_renderable(
                     return false;
                 }
             } else if let Some(meta) = token_meta {
-                if !super::primitives::token_amount_is_exactly_renderable(&worst, meta) {
+                if !super::primitives::token_amount_is_exactly_renderable(&worst, meta, AmountRows::Two) {
                     return false;
                 }
             }
@@ -373,7 +373,7 @@ fn legacy_values_are_exactly_renderable(
             };
             let value = U256(record.value);
             if !value.is_zero()
-                && !super::primitives::native_amount_is_exactly_renderable(&value, input.chain_id)
+                && !super::primitives::native_amount_is_exactly_renderable(&value, input.chain_id, AmountRows::Three)
             {
                 return false;
             }
@@ -861,14 +861,9 @@ fn render_safe_pages_inner(
         write_line(&mut pages.buf[next_page][0], "Safe value:");
         {
             let [_lbl, r1, r2, foot] = &mut pages.buf[next_page];
-            let fit = write_native_amount_two_rows(r1, r2, &inner_value, tx.chain_id);
-            write_line(
-                foot,
-                match fit {
-                    AmountFit::Full => "> next",
-                    AmountFit::Overflow => "!AMOUNT OVERFLOW",
-                },
-            );
+            if write_native_amount_rows(r1, r2, foot, &inner_value, tx.chain_id) == AmountFit::Overflow {
+                write_line(foot, "!AMOUNT OVERFLOW");
+            }
         }
         next_page += 1;
     }
@@ -1533,11 +1528,14 @@ mod inner_kind_hint_tests {
 
         let mut raw_fit = render_input([0x44; 20], 0, &unknown_data);
         raw_fit.chain_id = 4_242_424_242;
-        raw_fit.gas_price = be_u128(100_000_000_000_000_000_000);
+        // Two marked rows hold 25 raw digits (`15 + '>'`, `'>' + 10 +
+        // " raw"`). Until 2026-11-14 an unmarked cut held 28 and could show
+        // row 2 as `000000000000 raw`.
+        raw_fit.gas_price = be_u128(100_000_000_000_000_000);
         assert!(legacy_values_are_exactly_renderable(&raw_fit, None));
         assert!(
             render_safe_pages_inner(&raw_fit, None, None, &resolver).is_ok(),
-            "a 28-digit unknown-chain raw refund bound must fit"
+            "a 25-digit unknown-chain raw refund bound must fit"
         );
 
         let mut raw_wide = render_input([0x44; 20], 0, &unknown_data);
@@ -1613,7 +1611,10 @@ mod inner_kind_hint_tests {
             render_safe_pages_inner(&two, None, None, &resolver).expect("raw two must fit");
         assert_ne!(one_pages.buf, two_pages.buf);
 
-        let fit_value = be_u128(10u128.pow(28) - 1);
+        // A record value page has three value rows: 38 raw digits fit
+        // (`15 + '>'`, `'>' + 14 + '>'`, `'>' + 9 + " raw"`), the full word
+        // does not.
+        let fit_value = be_u128(10u128.pow(38) - 1);
         let fit_packed = pack_record(0, &[0x44; 20], &fit_value, &[]);
         let fit_calldata = encode_multisend(&fit_packed);
         let mut fit = render_input(multisend, 1, &fit_calldata);
@@ -1621,7 +1622,7 @@ mod inner_kind_hint_tests {
         assert!(legacy_values_are_exactly_renderable(&fit, None));
         assert!(render_safe_pages_inner(&fit, None, None, &resolver).is_ok());
 
-        let wide_value = be_u128(10u128.pow(28));
+        let wide_value = [0xff; 32];
         let wide_packed = pack_record(0, &[0x44; 20], &wide_value, &[]);
         let wide_calldata = encode_multisend(&wide_packed);
         let mut wide = render_input(multisend, 1, &wide_calldata);
@@ -1629,7 +1630,7 @@ mod inner_kind_hint_tests {
         assert!(!legacy_values_are_exactly_renderable(&wide, None));
         assert!(
             render_safe_pages_inner(&wide, None, None, &resolver).is_err(),
-            "a raw value wider than the real two-row painter must refuse"
+            "a raw value wider than the real three-row painter must refuse"
         );
     }
 
@@ -1765,14 +1766,9 @@ fn append_inner_kind_pages(
             write_native_currency_row(&mut pages.buf[next_page][0], b"Send ", ctx.chain_id, b":");
             {
                 let [_lbl, r1, r2, foot] = &mut pages.buf[next_page];
-                let fit = write_native_amount_two_rows(r1, r2, &ctx.value, ctx.chain_id);
-                write_line(
-                    foot,
-                    match fit {
-                        AmountFit::Full => "> next",
-                        AmountFit::Overflow => "!AMOUNT OVERFLOW",
-                    },
-                );
+                if write_native_amount_rows(r1, r2, foot, &ctx.value, ctx.chain_id) == AmountFit::Overflow {
+                    write_line(foot, "!AMOUNT OVERFLOW");
+                }
             }
             next_page += 1;
         }
@@ -1974,14 +1970,11 @@ fn append_erc20_tail_pages(
                 write_line(&mut pages.buf[next_page][3], "> next");
             } else {
                 let [_lbl, r1, r2, foot] = &mut pages.buf[next_page];
-                let fit = write_token_amount_two_rows(r1, r2, &amount, meta);
-                write_line(
-                    foot,
-                    match fit {
-                        AmountFit::Full => "> next",
-                        AmountFit::Overflow => "!AMOUNT OVERFLOW",
-                    },
-                );
+                // Rows 1-2 and `> next`, or rows 1-3 when only a third
+                // wrapped row holds every digit.
+                if write_token_amount_rows(r1, r2, foot, &amount, meta) == AmountFit::Overflow {
+                    write_line(foot, "!AMOUNT OVERFLOW");
+                }
             }
         }
         None => {
@@ -2010,14 +2003,9 @@ fn append_erc20_tail_pages(
                     symbol: b"units",
                 };
                 let [_lbl, r1, r2, foot] = &mut pages.buf[next_page];
-                let fit = write_token_amount_two_rows(r1, r2, &amount, &units);
-                write_line(
-                    foot,
-                    match fit {
-                        AmountFit::Full => "> next",
-                        AmountFit::Overflow => "!AMOUNT OVERFLOW",
-                    },
-                );
+                if write_token_amount_rows(r1, r2, foot, &amount, &units) == AmountFit::Overflow {
+                    write_line(foot, "!AMOUNT OVERFLOW");
+                }
             }
         }
     }
@@ -2169,14 +2157,9 @@ fn write_msend_divider_page(
 fn write_record_value_page(pages: &mut Pages, page: usize, value: &U256, chain_id: u64) {
     write_line(&mut pages.buf[page][0], "Record value:");
     let [_lbl, r1, r2, foot] = &mut pages.buf[page];
-    let fit = write_native_amount_two_rows(r1, r2, value, chain_id);
-    write_line(
-        foot,
-        match fit {
-            AmountFit::Full => "> next",
-            AmountFit::Overflow => "!AMOUNT OVERFLOW",
-        },
-    );
+    if write_native_amount_rows(r1, r2, foot, value, chain_id) == AmountFit::Overflow {
+        write_line(foot, "!AMOUNT OVERFLOW");
+    }
 }
 
 /// Page-2 hint row for the multiSend flow: "Inner: MSend xN".

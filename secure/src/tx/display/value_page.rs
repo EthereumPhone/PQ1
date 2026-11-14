@@ -276,17 +276,18 @@ pub(super) fn enforce_native_value_page(
 }
 
 pub(crate) fn build_native_value_page(value: &U256, chain_id: u64) -> Option<NativeValuePage> {
-    if !primitives::native_amount_is_exactly_renderable(value, chain_id) {
+    if !primitives::native_amount_is_exactly_renderable(value, chain_id, primitives::AmountRows::Three) {
         return None;
     }
     let mut page = [[b' '; DISPLAY_COLS]; DISPLAY_ROWS];
     primitives::write_native_currency_row(&mut page[0], b"! NATIVE ", chain_id, b"");
     let [_lbl, r1, r2, foot] = &mut page;
-    let fit = primitives::write_native_amount_two_rows(r1, r2, value, chain_id);
+    // Rows 1-2 and `> next`, or rows 1-3 when only a third wrapped row
+    // holds every digit.
+    let fit = primitives::write_native_amount_rows(r1, r2, foot, value, chain_id);
     if fit != primitives::AmountFit::Full {
         return None;
     }
-    primitives::write_line(foot, "> next");
     Some(page)
 }
 
@@ -1132,8 +1133,8 @@ mod tests {
             native_value_page_proof(&exact_pages, exact_prior, &one_wei(), UNKNOWN_CHAIN),
             crate::fi::OK_SENTINEL
         );
-        assert_eq!(&exact_pages.buf[exact_prior][1][..1], b"1");
-        assert_eq!(&exact_pages.buf[exact_prior][2][..3], b"raw");
+        assert_eq!(&exact_pages.buf[exact_prior][1][..6], b"1 raw ");
+        assert_eq!(exact_pages.buf[exact_prior][2], [b' '; DISPLAY_COLS]);
 
         let overwide = U256([0xff; 32]);
         let mut refused = marker_pages(2);

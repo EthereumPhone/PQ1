@@ -14,6 +14,7 @@
 
 use super::primitives::{
     chain_name, eip55_hex, format_u64, known_native_ticker, native_amount_form, token_amount_form, AmountForm,
+    AmountRows,
 };
 use crate::names::NameResolver;
 use crate::tx::eip1559::U256;
@@ -245,16 +246,12 @@ impl<'s> Emit<'s> {
     /// wraps once with continuation marks (`layout_amount_wrapped`).
     pub(crate) fn amount(&mut self, id: &[u8], label: &[u8], amt: &Amount, pulse: bool) -> Result<(), ()> {
         let lay = layout_amount_or_wrap(amt.digits(), amt.unit(), Region::Docked).map_err(|_| ())?;
-        if lay.n == 1 {
-            self.detail(id, label, &[(lay.lines[0].as_bytes(), Weight::Regular)], pulse)
-        } else {
-            self.detail(
-                id,
-                label,
-                &[(lay.lines[0].as_bytes(), Weight::Regular), (lay.lines[1].as_bytes(), Weight::Regular)],
-                pulse,
-            )
+        let shown = lay.as_slice();
+        let mut lines: [(&[u8], Weight); 3] = [(b"", Weight::Regular); 3];
+        for (slot, l) in lines.iter_mut().zip(shown) {
+            *slot = (l.as_bytes(), Weight::Regular);
         }
+        self.detail(id, label, &lines[..shown.len()], pulse)
     }
 }
 
@@ -308,8 +305,8 @@ impl Amount {
 /// (`primitives::native_amount_form`: the exact decimal, else `wei`; `raw` on
 /// an unknown chain). `None` where the page could not render it exactly (the
 /// dispatcher refused). There is no second policy here to drift.
-pub(crate) fn native_amount(value: &U256, chain_id: u64) -> Option<Amount> {
-    match native_amount_form(value, chain_id)? {
+pub(crate) fn native_amount(value: &U256, chain_id: u64, rows: AmountRows) -> Option<Amount> {
+    match native_amount_form(value, chain_id, rows)? {
         AmountForm::Decimal { frac } => Amount::new(value, 18, frac, known_native_ticker(chain_id)?),
         AmountForm::BaseUnits => {
             Amount::new(value, 0, 0, if known_native_ticker(chain_id).is_some() { b"wei" } else { b"raw" })
@@ -320,11 +317,11 @@ pub(crate) fn native_amount(value: &U256, chain_id: u64) -> Option<Amount> {
 /// A derived native bound (Safe refund estimate). Same policy as a signed
 /// native amount since 2026-11-14.
 pub(crate) fn native_derived_amount(value: &U256, chain_id: u64) -> Option<Amount> {
-    native_amount(value, chain_id)
+    native_amount(value, chain_id, AmountRows::Two)
 }
 
 /// A token amount for metadata given as parts; see [`token_amount_as_page`].
-pub(crate) fn token_amount(value: &U256, decimals: u8, symbol: &[u8]) -> Option<Amount> {
+pub(crate) fn token_amount(value: &U256, decimals: u8, symbol: &[u8], rows: AmountRows) -> Option<Amount> {
     let meta = crate::erc20::bundle::Erc20Metadata {
         chain_id: 0,
         contract: [0u8; 20],
@@ -332,16 +329,21 @@ pub(crate) fn token_amount(value: &U256, decimals: u8, symbol: &[u8]) -> Option<
         name: &[],
         symbol,
     };
-    token_amount_as_page(value, &meta)
+    token_amount_as_page(value, &meta, rows)
 }
 
 /// A verified token amount in exactly the form its page painter uses
-/// (`primitives::token_amount_form`): the widened exact decimal (on the page
-/// possibly split or wrapped across both rows), or — only when no decimal
-/// layout fit the page — the integer in labelled base units. `None` where the
-/// page could not render it exactly (the dispatcher refused).
-pub(crate) fn token_amount_as_page(value: &U256, meta: &crate::erc20::bundle::Erc20Metadata<'_>) -> Option<Amount> {
-    match token_amount_form(value, meta)? {
+/// (`primitives::token_amount_form`) with the same `rows` that page gives
+/// it: the widened exact decimal (on the page possibly split or wrapped), or
+/// — only when no decimal layout fit the page — the integer in labelled base
+/// units. `None` where the page could not render it exactly (the dispatcher
+/// refused).
+pub(crate) fn token_amount_as_page(
+    value: &U256,
+    meta: &crate::erc20::bundle::Erc20Metadata<'_>,
+    rows: AmountRows,
+) -> Option<Amount> {
+    match token_amount_form(value, meta, rows)? {
         AmountForm::Decimal { frac } => Amount::new(value, u32::from(meta.decimals), frac, meta.symbol),
         AmountForm::BaseUnits => {
             let mut unit = [0u8; 40];
