@@ -36,6 +36,13 @@ useDefault = true
 id = "generic-api-key"
 
 [[rules.allowlists]]
+description = "Exact public SHA-256 output-serialization source digest"
+condition = "AND"
+paths = ['''^contracts/verification/sha256\-output/frozen/input\-contract\.json$''']
+regexTarget = "line"
+regexes = ['''^\s*"upstream_core_api_sha256": "73b160d98bfa6737688875ad73da5e3c2c93582604dc313d208200e12fdab676",?\s*$''']
+
+[[rules.allowlists]]
 description = "Exact public SHA-256 history mapping source digest"
 condition = "AND"
 paths = ['''^contracts/verification/sha256\-history/profile\.json$''']
