@@ -1672,6 +1672,10 @@ pub struct Emitted {
     pub primary_type_hash: [u8; 32],
     pub ir_bytes: Vec<u8>,
     pub leaf_index: usize,
+    /// Sorted, deduplicated effective `tokenAmount` literal token addresses
+    /// in this leaf's emitted formats (native sentinels excluded). Host-only;
+    /// not part of the device IR.
+    pub token_amount_constants: Vec<[u8; 20]>,
 }
 
 pub struct Erc7730BuildResult {
@@ -4196,6 +4200,7 @@ fn compile_resolved_descriptor_with_nested_calldata_enrollments(
         owner: owner.clone(),
         contract_name: contract_name.clone(),
         eip712_word_guard_source_required,
+        token_amount_constants: Vec::new(),
     };
 
     // Interpolation enrollment can differ by deployment: a static token may
@@ -4320,6 +4325,12 @@ fn compile_resolved_descriptor_with_nested_calldata_enrollments(
             primary_type_hash,
             ir_bytes,
             leaf_index: 0, // filled in by build_db after sorting
+            token_amount_constants: {
+                let mut tokens = std::mem::take(&mut ctx.token_amount_constants);
+                tokens.sort_unstable();
+                tokens.dedup();
+                tokens
+            },
         });
     }
 
@@ -4878,6 +4889,12 @@ struct CompileCtx {
     /// bytes. Every admitted EIP-712 format from this source must match one
     /// exact word-guard enrollment or fail closed.
     eip712_word_guard_source_required: bool,
+    /// Effective `tokenAmount` literal `params.token` addresses compiled into
+    /// the formats that survived (no `tokenPath`, not a native sentinel).
+    /// Collected per deployment and copied into [`Emitted`] so the
+    /// descriptor constant-token gate can require each `(chain, token)` to be
+    /// in the ERC-20 DB. See [`check_token_amount_constants`].
+    token_amount_constants: Vec<[u8; 20]>,
 }
 
 /// Deployment-bound interpolation authority. The ERC-20 key set comes from
@@ -5344,6 +5361,7 @@ fn compile_formats_reporting_with_nested_calldata_enrollments(
             continue;
         }
         let mut one: Vec<u8> = Vec::new();
+        let token_mark = ctx.token_amount_constants.len();
         match compile_one_format_with_nested_calldata_enrollments(
             sig,
             fmt,
@@ -5357,6 +5375,8 @@ fn compile_formats_reporting_with_nested_calldata_enrollments(
         ) {
             Ok(()) => survivors.push(one),
             Err(e) if allow_partial_format_drops => {
+                // A dropped format emits nothing; forget its token literals.
+                ctx.token_amount_constants.truncate(token_mark);
                 format_errs.push(format!("format `{sig}`: {e}"));
             }
             Err(e) => return Err(e),
@@ -5893,6 +5913,109 @@ fn interpolation_paths_match(field_path: &str, placeholder: &str) -> bool {
     field_path == placeholder
         || field_path.strip_prefix("#.") == Some(placeholder)
         || placeholder.strip_prefix("#.") == Some(field_path)
+}
+
+/// Well-known native-currency sentinels. A `tokenAmount` literal equal to
+/// one of these denotes the chain's native coin, not an ERC-20, and is exempt
+/// from the constant-token gate.
+pub const NATIVE_TOKEN_SENTINELS: [[u8; 20]; 2] = [[0xEE; 20], [0x00; 20]];
+
+/// One reviewed exception to the descriptor constant-token gate.
+#[derive(Debug, Clone, Copy)]
+pub struct TokenConstantException {
+    pub chain_id: u64,
+    /// Lower-case `0x`-prefixed address.
+    pub token: &'static str,
+    pub reason: &'static str,
+}
+
+/// Every effective ERC-7730 `tokenAmount` literal `(chain, token)` in an
+/// emitted leaf must be an ERC-20 DB row (so the device can show exact
+/// decimals once the companion attaches its bundle), a native sentinel, or
+/// one of the reviewed `exceptions`. A descriptor that pins a token the DB
+/// does not know would otherwise render that amount raw / UNVERIFIED with no
+/// build-time signal.
+///
+/// Also fails on a stale exception (one no emitted leaf uses, or one that the
+/// DB now covers) so the list cannot silently outlive its reason.
+pub fn check_token_amount_constants(
+    entries: &[Emitted],
+    erc20: &Erc20Capabilities,
+    exceptions: &[TokenConstantException],
+) -> Result<(), String> {
+    let mut excepted: BTreeMap<(u64, [u8; 20]), &TokenConstantException> = BTreeMap::new();
+    for exception in exceptions {
+        let token = parse_canonical_hex::<20>("token-constant exception", exception.token)?;
+        if exception.reason.trim().is_empty() {
+            return Err(format!(
+                "token-constant exception chain_id={} token={} has no reason",
+                exception.chain_id, exception.token
+            ));
+        }
+        if excepted
+            .insert((exception.chain_id, token), exception)
+            .is_some()
+        {
+            return Err(format!(
+                "duplicate token-constant exception chain_id={} token={}",
+                exception.chain_id, exception.token
+            ));
+        }
+    }
+
+    let mut missing: BTreeMap<(u64, [u8; 20]), BTreeSet<String>> = BTreeMap::new();
+    let mut used: BTreeSet<(u64, [u8; 20])> = BTreeSet::new();
+    for entry in entries {
+        for token in &entry.token_amount_constants {
+            let key = (entry.chain_id, *token);
+            if erc20.contains(entry.chain_id, token) {
+                if let Some(exception) = excepted.get(&key) {
+                    return Err(format!(
+                        "stale token-constant exception chain_id={} token={}: the ERC-20 DB \
+                         now has this token; remove the exception ({})",
+                        exception.chain_id, exception.token, exception.reason
+                    ));
+                }
+                continue;
+            }
+            if excepted.contains_key(&key) {
+                used.insert(key);
+                continue;
+            }
+            // Never print an absolute checkout prefix.
+            let source = entry.source.display().to_string();
+            let source = source
+                .find("secure/data/")
+                .map_or(source.as_str(), |at| &source[at..])
+                .to_string();
+            missing.entry(key).or_default().insert(source);
+        }
+    }
+    if let Some(((chain_id, token), _)) = excepted.iter().find(|(key, _)| !used.contains(key)) {
+        return Err(format!(
+            "stale token-constant exception chain_id={chain_id} token=0x{}: no emitted \
+             descriptor leaf pins it; remove the exception",
+            hex::encode(token)
+        ));
+    }
+    if missing.is_empty() {
+        return Ok(());
+    }
+    let mut message = format!(
+        "{} ERC-7730 tokenAmount constant token(s) are neither in the ERC-20 DB, a native \
+         sentinel, nor a reviewed exception (add the token to secure/data/erc20.json after \
+         an on-chain decimals check, or add a reasoned entry to \
+         dbgen/src/token_constant_exceptions.rs):",
+        missing.len()
+    );
+    for ((chain_id, token), sources) in &missing {
+        message.push_str(&format!(
+            "\n  chain_id={chain_id} token=0x{} in {}",
+            hex::encode(token),
+            sources.iter().cloned().collect::<Vec<_>>().join(", ")
+        ));
+    }
+    Err(message)
 }
 
 #[cfg(test)]
@@ -8678,6 +8801,21 @@ fn compile_params(
                     .ok_or_else(|| "tokenAmount.token must be a string".to_string())?;
                 let bytes = resolve_address_or_const(t, ctx)?;
                 push_tlv(&mut out, PARAM_TOKEN, &bytes)?;
+                // Device precedence is tokenPath first; a literal next to a
+                // tokenPath is dormant. Record only an effective literal that
+                // is not a native-currency sentinel for this field.
+                if params.get("tokenPath").is_none() && !NATIVE_TOKEN_SENTINELS.contains(&bytes) {
+                    let native = match params.get("nativeCurrencyAddress") {
+                        Some(nca) => compile_native_currency_addresses(nca, ctx)?,
+                        None => Vec::new(),
+                    };
+                    if !native
+                        .chunks_exact(pqsigner_erc7730::render::params::NATIVE_CURRENCY_ADDRESS_LEN)
+                        .any(|candidate| candidate == bytes)
+                    {
+                        ctx.token_amount_constants.push(bytes);
+                    }
+                }
             }
             // `nativeCurrencyAddress` accepts the ERC-7730 scalar or list
             // shape. Resolve constants now and authenticate the complete
@@ -14803,6 +14941,7 @@ mod tests {
             owner: String::new(),
             contract_name: String::new(),
             eip712_word_guard_source_required: false,
+            token_amount_constants: Vec::new(),
         };
         // STRICT: the unrenderable `swap` fails the WHOLE descriptor.
         assert!(compile_formats(&display, CTX_CONTRACT, &mut ctx, false).is_err());
@@ -15970,6 +16109,7 @@ mod tests {
             owner: String::new(),
             contract_name: String::new(),
             eip712_word_guard_source_required: false,
+            token_amount_constants: Vec::new(),
         };
         let mut pool = Pool::new();
         let cf = compile_one_field(
@@ -16058,6 +16198,7 @@ mod tests {
             owner: String::new(),
             contract_name: String::new(),
             eip712_word_guard_source_required: false,
+            token_amount_constants: Vec::new(),
         };
         let mut pool = Pool::new();
         let mut out = Vec::new();
@@ -16435,6 +16576,7 @@ mod tests {
             owner: String::new(),
             contract_name: String::new(),
             eip712_word_guard_source_required: false,
+            token_amount_constants: Vec::new(),
         }
     }
 
@@ -18039,6 +18181,7 @@ mod tests {
             primary_type_hash,
             ir_bytes,
             leaf_index: 0,
+            token_amount_constants: Vec::new(),
         }
     }
 
@@ -18055,6 +18198,7 @@ mod tests {
             primary_type_hash: [0; 32],
             ir_bytes: vec![contract_byte],
             leaf_index: 0,
+            token_amount_constants: Vec::new(),
         };
         let mut entries = vec![
             make_entry("accepted.json", 0x11, 1),

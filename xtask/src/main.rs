@@ -683,6 +683,41 @@ fn build_capability_bound_registry(
 /// the corresponding Merkle databases. Keeping this shared by generation and
 /// `--check` prevents either path from silently falling back to the
 /// conservative, capability-free compiler API.
+/// Reviewed constant-token exceptions for the prod and E2E catalogues. The
+/// committed lists (`dbgen::token_constant_exceptions`) fit only the committed
+/// registry: the gate rejects an exception no emitted leaf uses, so a custom
+/// or synthetic catalogue gets no exceptions at all (strictly tighter: every
+/// pinned token must then be a DB token or a native sentinel).
+#[derive(Clone, Copy)]
+struct TokenConstantExceptions<'a> {
+    prod: &'a [dbgen::erc7730::TokenConstantException],
+    e2e: &'a [dbgen::erc7730::TokenConstantException],
+}
+
+impl TokenConstantExceptions<'static> {
+    const NONE: Self = Self {
+        prod: &[],
+        e2e: &[],
+    };
+
+    /// The committed lists for each catalogue built from its committed input,
+    /// none otherwise.
+    fn for_inputs(committed_prod: bool, committed_e2e: bool) -> Self {
+        Self {
+            prod: if committed_prod {
+                dbgen::token_constant_exceptions::PRODUCTION
+            } else {
+                &[]
+            },
+            e2e: if committed_e2e {
+                dbgen::token_constant_exceptions::E2E
+            } else {
+                &[]
+            },
+        }
+    }
+}
+
 fn build_erc7730_catalogues(
     workspace_root: &Path,
     input_dir: &Path,
@@ -690,6 +725,7 @@ fn build_erc7730_catalogues(
     registry_root: Option<&Path>,
     e2e_input_dir: &Path,
     e2e_policy: &Path,
+    token_exceptions: TokenConstantExceptions<'_>,
 ) -> Result<Erc7730CatalogueBuild, String> {
     let prod_erc20 = load_production_erc20_capability_input(workspace_root)?;
     let e2e_erc20 =
@@ -710,6 +746,22 @@ fn build_erc7730_catalogues(
         &e2e_erc20.capabilities,
     )
     .map_err(|e| format!("e2e build failed: {e}"))?;
+
+    // Same constant-token gate as dbgen: every descriptor-pinned tokenAmount
+    // literal in an emitted leaf is a DB token, a native sentinel, or a
+    // reviewed exception.
+    dbgen::erc7730::check_token_amount_constants(
+        &prod.entries,
+        &prod_erc20.capabilities,
+        token_exceptions.prod,
+    )
+    .map_err(|e| format!("prod constant-token gate failed: {e}"))?;
+    dbgen::erc7730::check_token_amount_constants(
+        &e2e.entries,
+        &e2e_erc20.capabilities,
+        token_exceptions.e2e,
+    )
+    .map_err(|e| format!("e2e constant-token gate failed: {e}"))?;
 
     Ok(Erc7730CatalogueBuild {
         prod,
@@ -828,6 +880,11 @@ fn cmd_gen_erc7730_descriptors(args: &[String]) -> ExitCode {
         registry_root.as_deref(),
         &e2e_input_dir,
         &e2e_policy,
+        TokenConstantExceptions::for_inputs(
+            default_overlay.is_some(),
+            e2e_input_dir == workspace_root.join(ERC7730_DEFAULT_E2E_INPUT)
+                && e2e_policy == workspace_root.join(ERC7730_DEFAULT_E2E_POLICY),
+        ),
     ) {
         Ok(result) => result,
         Err(e) => {
@@ -2412,6 +2469,7 @@ mod tests {
             Some(&registry_root),
             &e2e_input,
             &e2e_policy,
+            TokenConstantExceptions::NONE,
         )
         .expect("xtask catalogue build");
         assert!(generated.prod_skips.is_empty());

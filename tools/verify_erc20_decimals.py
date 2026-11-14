@@ -69,6 +69,9 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import erc20_text  # noqa: E402  (the ONE name/symbol sanitizer, shared with build_erc20_db.py)
+
 REPO = Path(__file__).resolve().parent.parent
 DB_PATH = REPO / "secure" / "data" / "erc20.json"
 E2E_DB_PATH = REPO / "secure" / "data" / "erc20-e2e.json"
@@ -91,12 +94,16 @@ PROBE_SELECTOR = "0xdeadbeef"
 MAX_DISPLAY_DECIMALS = 36
 MAX_U8 = 255  # dbgen stores decimals as a single byte
 
-# Sanity caps on strings we are willing to WRITE back from chain. The upstream
-# lists keep symbols/names short; an on-chain value far outside this range (a
-# URL, an emoji-spam name, megabytes of calldata) is not trusted as a fix —
-# the field is reported but left as-is.
-MAX_SYMBOL_LEN = 32
-MAX_NAME_LEN = 128
+# Strings written back from chain go through tools/erc20_text.py, the same
+# sanitizer build_erc20_db.py uses: every written name/symbol is 1..=64 bytes of
+# printable ASCII (the device rule in tx/src/erc20/bundle.rs, which dbgen
+# enforces). An on-chain name/symbol that has no safe ASCII form (Cyrillic or
+# Greek look-alikes, CJK, emoji, an over-long symbol) cannot be written; under
+# --fix that row is REMOVED from the DB instead (the device then shows the raw
+# amount and the address as UNVERIFIED). Comparing DB vs chain is done on the
+# sanitized form so an already-folded row ("USDT0" for on-chain "USD₮0") is
+# not reported as a mismatch.
+DROP_ROW = object()  # writable_fix(): the on-chain value cannot be stored
 
 CHAIN_NAMES = {
     1: "ethereum", 10: "optimism", 56: "bnb-chain", 130: "unichain",
@@ -212,12 +219,19 @@ def decode_decimals(result_hex):
 
 
 def _clean_str(s):
-    """Keep printable chars, collapse whitespace, strip. '' -> None."""
-    if s is None:
-        return None
-    s = "".join(ch for ch in s if ch.isprintable())
-    s = " ".join(s.split()).strip()
-    return s or None
+    """Raw on-chain string for reporting: control characters stripped,
+    whitespace collapsed, Unicode kept (tools/erc20_text.basic_clean).
+    '' -> None. The DB form is erc20_text.clean_name / clean_symbol."""
+    return erc20_text.basic_clean(s)
+
+
+def _db_form(field, oc_val):
+    """The value the DB would store for an on-chain reading, or None."""
+    if field == "symbol":
+        return erc20_text.clean_symbol(oc_val)
+    if field == "name":
+        return erc20_text.clean_name(oc_val)
+    return oc_val
 
 
 def decode_string(result_hex):
@@ -510,27 +524,27 @@ def field_matches(field, db_val, oc_val):
     if field == "decimals":
         return oc_val == db_val
     if field == "symbol":
-        # symbols are short identifiers; compare case-sensitively after trim
-        return _clean_str(str(db_val)) == oc_val
+        # symbols are short identifiers; compare case-sensitively in DB form
+        return str(db_val) == _db_form(field, oc_val)
     if field == "name":
         # names vary cosmetically across lists; ignore pure case/whitespace
         a = (_clean_str(str(db_val)) or "").casefold()
-        b = (oc_val or "").casefold()
+        b = (_db_form(field, oc_val) or "").casefold()
         return a == b
     return True
 
 
 def writable_fix(field, oc_val):
-    """The value we would WRITE for `field`, or None if the on-chain reading is
-    not trustworthy enough to write (too long / empty)."""
+    """The value we would WRITE for `field`; DROP_ROW if the on-chain
+    name/symbol has no device-verifiable form (the row is removed under
+    --fix); None if the reading is unusable (left as-is)."""
     if oc_val is None:
         return None
     if field == "decimals":
         return oc_val if 0 <= oc_val <= MAX_U8 else None
-    if field == "symbol":
-        return oc_val if 0 < len(oc_val) <= MAX_SYMBOL_LEN else None
-    if field == "name":
-        return oc_val if 0 < len(oc_val) <= MAX_NAME_LEN else None
+    if field in ("symbol", "name"):
+        v = _db_form(field, oc_val)
+        return DROP_ROW if v is None else v
     return None
 
 
@@ -772,13 +786,22 @@ def process_db(path, pools, args):
         return len(issues) + len(dead), len(unresolved)
 
     changed = 0
+    unstorable_idx = set()
     # 1) confirm + apply field corrections
     if issues:
         confirmed, conflicts = confirm_issues(issues, pools, args)
-        for idx, _t, field, _d, ocv in confirmed:
-            db[idx][field] = writable_fix(field, ocv)
-        changed += len(confirmed)
-        print(f"  FIXED {len(confirmed)} field(s) (2-reading-confirmed)")
+        fixed = 0
+        for idx, t, field, _d, ocv in confirmed:
+            fix = writable_fix(field, ocv)
+            if fix is DROP_ROW:
+                unstorable_idx.add(idx)
+                print(f"  DROP chain {t['chain_id']} {t['address']}: on-chain {field} "
+                      f"{ocv!r} has no device-verifiable ASCII form")
+                continue
+            db[idx][field] = fix
+            fixed += 1
+        changed += fixed
+        print(f"  FIXED {fixed} field(s) (2-reading-confirmed)")
         if conflicts:
             print(f"  {len(conflicts)} field change(s) NOT applied (2nd reading "
                   f"disagreed / unwritable) — left as-is:")
@@ -799,9 +822,12 @@ def process_db(path, pools, args):
             print(f"  {len(dead_conflicts)} removals NOT applied (had code on 2nd "
                   f"reading) — left as-is")
 
+    if unstorable_idx:
+        removed_idx |= unstorable_idx
+        changed += len(unstorable_idx)
     if removed_idx:
+        changed += len(removed_idx - unstorable_idx)
         db = [r for i, r in enumerate(db) if i not in removed_idx]
-        changed += len(removed_idx)
 
     if changed:
         write_db(path, db)

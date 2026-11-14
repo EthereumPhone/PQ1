@@ -347,6 +347,17 @@ fn main() {
         );
     }
     erc7730::round_trip_check(&erc7730_res).expect("erc7730 round-trip failed");
+    // Every descriptor-pinned tokenAmount literal must be a DB token, a native
+    // sentinel, or a reviewed exception (dbgen/src/token_constant_exceptions.rs).
+    erc7730::check_token_amount_constants(
+        &erc7730_res.entries,
+        &erc20_res.capabilities,
+        dbgen::token_constant_exceptions::PRODUCTION,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("dbgen: ERC-7730 constant-token gate failed: {e}");
+        std::process::exit(1);
+    });
     let erc7730_status =
         erc7730::catalogue_status_v1(&erc7730_res, erc7730_review_source.manifest_sha256())
             .expect("encode erc7730 catalogue status");
@@ -407,6 +418,15 @@ fn main() {
         std::process::exit(1);
     });
     erc7730::round_trip_check(&erc7730_e2e_res).expect("erc7730 e2e round-trip failed");
+    erc7730::check_token_amount_constants(
+        &erc7730_e2e_res.entries,
+        &erc20_e2e_res.capabilities,
+        dbgen::token_constant_exceptions::E2E,
+    )
+    .unwrap_or_else(|e| {
+        eprintln!("dbgen: ERC-7730 e2e constant-token gate failed: {e}");
+        std::process::exit(1);
+    });
     let erc7730_status_e2e = erc7730::catalogue_status_v1(&erc7730_e2e_res, [0; 32])
         .expect("encode erc7730 e2e catalogue status");
     let erc7730_status_e2e_bytes = erc7730_status_e2e.to_bytes();

@@ -58,6 +58,14 @@ from collections import defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import build_erc20_db as bdb  # noqa: E402  (reuse the real build loaders/priorities)
+import erc20_text  # noqa: E402  (the DB's own name/symbol sanitizer)
+
+
+def symbol_key(sym):
+    """Compare tickers in the DB's sanitized form: the DB stores the folded
+    symbol (tools/erc20_text.py, e.g. "USD₮0" -> "USDT0"), so a raw upstream
+    ticker must be folded the same way or a folded collision is missed."""
+    return (erc20_text.fold_ascii(sym) or str(sym)).upper()
 
 CHAIN_NAMES = {
     1: "Ethereum", 10: "Optimism", 56: "BNB Chain", 130: "Unichain",
@@ -98,7 +106,7 @@ def build_trust_maps(trust_threshold):
             continue
         for (cid, addr, name, sym, dec, source, canon) in rows:
             al = addr.lower()
-            SYM = sym.upper()
+            SYM = symbol_key(sym)
             n_rows += 1
             any_src[(cid, SYM, al)][stem] = prio
             if prio >= trust_threshold:
@@ -113,7 +121,7 @@ def build_trust_maps(trust_threshold):
     for m in bdb.MANUAL_ADDITIONS:
         cid = m["chain_id"]
         al = m["address"].lower()
-        SYM = m["symbol"].upper()
+        SYM = symbol_key(m["symbol"])
         trusted[(cid, SYM)][al] = 10_000
         meta.setdefault((cid, al), (m["name"], m["symbol"]))
 
@@ -136,7 +144,7 @@ def scan(db, trusted, any_src, meta, trust_threshold):
     for t in db:
         cid = t["chain_id"]
         al = t["address"].lower()
-        SYM = str(t["symbol"]).upper()
+        SYM = symbol_key(t["symbol"])
         tset = trusted.get((cid, SYM), {})
         if not tset:
             continue                      # symbol unknown to curated lists -> nothing to impersonate

@@ -316,6 +316,10 @@ jobs:
       # drift on merge.
       - name: ERC-7730 descriptor catalog in-sync (drift gate)
         run: make check-erc7730-descriptors
+      # ERC-20 DB rows are the shared sanitizer's fixed point (tools/erc20_text.py);
+      # dbgen separately refuses any row the device verifier would reject.
+      - name: ERC-20 DB sanitizer-normal + sanitizer unit tests
+        run: make check-erc20-db
       # Deterministic/offline: malformed, revoked, and expired EAS rows must
       # never contribute to a descriptor's trusted-attester threshold.
       - name: ERC-8176 coverage checker regressions (offline)

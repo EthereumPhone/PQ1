@@ -22,11 +22,13 @@ Pipeline:
   2. Filter to TARGET_CHAINS, dedupe by (chain_id, address) accumulating the
      contributing source set, preferring the highest-priority source's
      name/symbol/decimals.
-  3. Sanitize name/symbol to printable ASCII (0x20..0x7e) — the on-device
-     verifier (tx/src/erc20/bundle.rs) REJECTS any non-ASCII byte and any
-     field outside 1..=64 bytes, so a non-conforming row would be a dead
-     entry that can never render. We strip-to-ASCII and clamp lengths so
-     every emitted row is guaranteed on-device-decodable.
+  3. Sanitize name/symbol with tools/erc20_text.py (the ONE sanitizer, shared
+     with tools/verify_erc20_decimals.py) — the on-device verifier
+     (tx/src/erc20/bundle.rs) REJECTS any non-ASCII byte and any field outside
+     1..=64 bytes, and dbgen refuses to build a DB holding such a row. Safe
+     folds (`₮`->`T`, `€`->`EUR`, accents dropped, ...) are applied; a row
+     whose name or symbol still holds a non-ASCII character (Cyrillic/Greek
+     look-alikes, CJK, emoji) is DROPPED, never folded to Latin.
   4. Resolve cross-chain same-address metadata conflicts. dbgen HARD-ERRORS
      if one contract appears on multiple chains with different name/symbol
      (copy-paste guard). With multichain data this is common (deterministic
@@ -47,6 +49,14 @@ blob into the 256 KB NS flash without overflow while production uses the full
 multi-MB blob. See dbgen/src/main.rs (ERC20_DB_ROOT / ERC20_DB_ROOT_E2E split).
 
 Run:  python3 tools/build_erc20_db.py   then   cargo run -p dbgen
+
+Normalize the checked-in DBs in place (no token lists needed; re-applies the
+shared sanitizer to every row, drops rows that cannot be made
+device-verifiable, and drops a row whose FOLDED symbol newly equals a
+blue-chip ticker — e.g. a scam "USD₮" folding to "USDT"):
+
+      python3 tools/build_erc20_db.py --normalize            # both DBs
+      python3 tools/build_erc20_db.py --normalize --check    # exit 1 if not normal
 """
 
 from __future__ import annotations
@@ -55,9 +65,11 @@ import json
 import pathlib
 import struct
 import sys
-import unicodedata
 from collections import Counter, defaultdict
 from typing import Iterable
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import erc20_text  # noqa: E402  (the shared name/symbol sanitizer)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -149,6 +161,17 @@ MANUAL_ADDITIONS = [
      "name": "Tether USD", "symbol": "USDT", "decimals": 6},
     {"chain_id": 130, "address": "0x4200000000000000000000000000000000000006",
      "name": "Wrapped Ether", "symbol": "WETH", "decimals": 18},
+    # ERC-7730 descriptor-pinned tokenAmount constants (dbgen constant-token
+    # gate, dbgen/src/token_constant_exceptions.rs). name/symbol/decimals read
+    # on-chain over two independent public RPCs on 2026-11-14; a bogus-selector
+    # probe reverted on each (real getters). Chain 1116 (Core) is outside
+    # TARGET_CHAINS: manual rows are added on any chain.
+    {"chain_id": 1, "address": "0x7751E2F4b8ae93EF6B79d86419d42FE3295A4559",
+     "name": "Wrapped USDL", "symbol": "wUSDL", "decimals": 6},
+    {"chain_id": 1, "address": "0xaf37c1167910ebC994e266949387d2c7C326b879",
+     "name": "Ondo U.S. Dollar Yield (Rebasing)", "symbol": "rUSDY", "decimals": 18},
+    {"chain_id": 1116, "address": "0xb3A8F0f0da9ffC65318aA39E55079796093029AD",
+     "name": "Liquid staked CORE", "symbol": "stCORE", "decimals": 18},
 ]
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -189,10 +212,13 @@ def load_denylist() -> set[tuple[int, str]]:
             deny.add((cid, parts[1].lower()))
     return deny
 
-# Uniswap Token List spec caps; also kept ≤ the on-device 64-byte field limit.
-NAME_MAX_CHARS = 60
-SYMBOL_MAX_CHARS = 20
-FIELD_MAX_BYTES = 64  # tx/src/erc20/bundle.rs MAX_DISPLAY_FIELD
+E2E_PATH = REPO / "secure" / "data" / "erc20-e2e.json"
+
+# A row whose symbol was CHANGED by folding and now equals one of these tickers
+# (case-insensitive) is dropped: folding must never manufacture a blue-chip
+# ticker ("USD₮" -> "USDT"). Derived tickers such as "USDT0" or "aUSDT" are
+# not in this set and are kept.
+FOLD_PROTECTED_SYMBOLS = frozenset({"USDT", "USDC", "WETH", "DAI", "WBTC", "ETH"})
 
 # ---------------------------------------------------------------------------
 # Pure-Python keccak-256 for EIP-55 address checksumming.
@@ -279,20 +305,17 @@ assert to_checksum_address("0xfb6916095ca1df60bb79ce92ce3ea74c37c5d359") == \
 # ---------------------------------------------------------------------------
 
 
-def sanitize_field(s: str, max_chars: int) -> str | None:
-    """NFC-normalize, drop any char outside printable ASCII (0x20..0x7e),
-    collapse whitespace, clamp to `max_chars` AND `FIELD_MAX_BYTES`. Returns
-    None if nothing renderable remains. Mirrors the on-device gate so every
-    emitted row is guaranteed to Merkle-decode + render."""
-    if not isinstance(s, str):
+def sanitize_row_text(name, symbol) -> tuple[str, str] | None:
+    """Device-verifiable (name, symbol) via tools/erc20_text.py, or None if
+    the row must be dropped (see that module for the policy)."""
+    n = erc20_text.clean_name(name)
+    sym = erc20_text.clean_symbol(symbol)
+    if n is None or sym is None:
         return None
-    s = unicodedata.normalize("NFC", s)
-    kept = "".join(c for c in s if 0x20 <= ord(c) <= 0x7E)
-    kept = " ".join(kept.split())  # collapse runs of whitespace, strip ends
-    kept = kept[:max_chars]
-    kept = kept.encode("ascii", "ignore")[:FIELD_MAX_BYTES].decode("ascii")
-    kept = kept.strip()
-    return kept or None
+    if (sym != symbol and sym.upper() in FOLD_PROTECTED_SYMBOLS
+            and str(symbol).strip().upper() != sym.upper()):
+        return None
+    return n, sym
 
 
 # ---------------------------------------------------------------------------
@@ -436,18 +459,19 @@ def main() -> int:
     entries: dict[tuple[int, str], dict] = {}
     dropped_sanitize = 0
     for (cid, addr), slot in pool.items():
-        name = sanitize_field(slot["name"], NAME_MAX_CHARS)
-        symbol = sanitize_field(slot["symbol"], SYMBOL_MAX_CHARS)
-        if name is None or symbol is None:
+        cleaned = sanitize_row_text(slot["name"], slot["symbol"])
+        if cleaned is None:
             dropped_sanitize += 1
             continue
+        name, symbol = cleaned
         entries[(cid, addr)] = {
             "chain_id": cid, "address": addr, "name": name,
             "symbol": symbol, "decimals": slot["decimals"],
             "sources": slot["sources"],
         }
     if dropped_sanitize:
-        print(f"  dropped {dropped_sanitize} rows (empty after ASCII sanitize)",
+        print(f"  dropped {dropped_sanitize} rows (not device-verifiable after "
+              f"erc20_text sanitize)",
               file=sys.stderr)
 
     # Resolve cross-chain same-address metadata conflicts (dbgen hard-errors
@@ -530,12 +554,12 @@ def main() -> int:
     for entry in MANUAL_ADDITIONS:
         cid = int(entry["chain_id"])
         addr_lower = entry["address"].lower()
-        if cid not in TARGET_CHAINS or (cid, addr_lower) in selected_keys:
+        if (cid, addr_lower) in selected_keys:
             continue
-        name = sanitize_field(entry["name"], NAME_MAX_CHARS)
-        symbol = sanitize_field(entry["symbol"], SYMBOL_MAX_CHARS)
-        if name is None or symbol is None:
+        cleaned = sanitize_row_text(entry["name"], entry["symbol"])
+        if cleaned is None:
             continue
+        name, symbol = cleaned
         selected.append({
             "chain_id": cid, "address": to_checksum_address(entry["address"]),
             "name": name, "symbol": symbol, "decimals": int(entry["decimals"]),
@@ -579,18 +603,87 @@ def main() -> int:
     ]
 
     OUT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    body_lines = [
-        "  " + json.dumps(r, ensure_ascii=False, separators=(", ", ": "))
-        for r in out
-    ]
-    OUT_PATH.write_text("[\n" + ",\n".join(body_lines) + "\n]\n", encoding="utf-8")
+    OUT_PATH.write_text(format_db(out), encoding="utf-8")
     per_chain = Counter(r["chain_id"] for r in out)
     print(f"==> wrote {len(out)} tokens to {OUT_PATH.relative_to(REPO)}", file=sys.stderr)
     for cid in sorted(per_chain):
-        print(f"      chain {cid:6d} {CHAIN_NAMES[cid]:24s}: {per_chain[cid]:5d}",
+        print(f"      chain {cid:6d} {CHAIN_NAMES.get(cid, '?'):24s}: {per_chain[cid]:5d}",
               file=sys.stderr)
     return 0
 
 
+def format_db(rows: list[dict]) -> str:
+    """The checked-in on-disk format (one JSON object per line), shared by
+    every writer so diffs stay row-local."""
+    body = [
+        "  " + json.dumps(
+            {"chain_id": r["chain_id"], "address": r["address"],
+             "name": r["name"], "symbol": r["symbol"], "decimals": r["decimals"]},
+            ensure_ascii=False, separators=(", ", ": "))
+        for r in rows
+    ]
+    return "[\n" + ",\n".join(body) + "\n]\n"
+
+
+def normalize_rows(rows: list[dict]) -> tuple[list[dict], dict[str, list]]:
+    """Re-apply the shared sanitizer to already-built rows, preserving order.
+
+    Returns (kept_rows, report) where report has the lists `folded`,
+    `truncated` (name shortened) and `dropped` (row removed), each entry
+    `(chain_id, address, old_name, old_symbol, new_name, new_symbol)`."""
+    report: dict[str, list] = {"folded": [], "truncated": [], "dropped": []}
+    kept: list[dict] = []
+    for r in rows:
+        cleaned = sanitize_row_text(r["name"], r["symbol"])
+        if cleaned is None:
+            report["dropped"].append(
+                (r["chain_id"], r["address"], r["name"], r["symbol"], None, None))
+            continue
+        name, symbol = cleaned
+        if (name, symbol) != (r["name"], r["symbol"]):
+            folded_name = erc20_text.fold_ascii(r["name"])
+            entry = (r["chain_id"], r["address"], r["name"], r["symbol"], name, symbol)
+            if folded_name is not None and name != folded_name:
+                report["truncated"].append(entry)
+            if (folded_name != r["name"]) or (symbol != r["symbol"]):
+                report["folded"].append(entry)
+        kept.append({**r, "name": name, "symbol": symbol})
+    return kept, report
+
+
+def normalize_main(argv: list[str]) -> int:
+    check = "--check" in argv
+    paths = [pathlib.Path(a) for a in argv if not a.startswith("--")]
+    if not paths:
+        paths = [OUT_PATH, E2E_PATH]
+    dirty = False
+    for path in paths:
+        raw = path.read_text(encoding="utf-8")
+        rows = json.loads(raw)
+        kept, report = normalize_rows(rows)
+        out = format_db(kept)
+        rel = path.relative_to(REPO) if path.is_absolute() and REPO in path.parents else path
+        print(f"==> {rel}: {len(rows)} rows; folded {len(report['folded'])}, "
+              f"truncated {len(report['truncated'])}, dropped {len(report['dropped'])}"
+              f" -> {len(kept)} rows", file=sys.stderr)
+        for kind in ("folded", "truncated", "dropped"):
+            for cid, addr, on, osym, nn, nsym in report[kind]:
+                arrow = "DROP" if nn is None else f"-> {nn!r} / {nsym!r}"
+                print(f"    {kind:9s} {cid:6d} {addr}  {on!r} / {osym!r}  {arrow}",
+                      file=sys.stderr)
+        if out != raw:
+            dirty = True
+            if not check:
+                path.write_text(out, encoding="utf-8")
+                print(f"    wrote {rel}", file=sys.stderr)
+    if check and dirty:
+        print("error: ERC-20 DB is not normalized; run "
+              "`python3 tools/build_erc20_db.py --normalize`", file=sys.stderr)
+        return 1
+    return 0
+
+
 if __name__ == "__main__":
+    if "--normalize" in sys.argv[1:]:
+        sys.exit(normalize_main([a for a in sys.argv[1:] if a != "--normalize"]))
     sys.exit(main())

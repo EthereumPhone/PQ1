@@ -2,7 +2,10 @@
 
 use crate::merkle::{leaf_hash, verify_proof, MerkleTree};
 use crate::{load_erc20_records, parse_hex_address, write_u32_le, write_u64_le};
-use pqsigner_tx::erc20::bundle::metadata_shape_is_device_verifiable;
+use pqsigner_tx::erc20::bundle::{
+    metadata_shape_is_device_verifiable, MAX_DISPLAY_DECIMALS, MAX_DISPLAY_FIELD,
+    MAX_ERC20_PROOF_DEPTH,
+};
 use sphincs_tz_shared::db_format::*;
 use std::collections::HashMap;
 use std::path::Path;
@@ -31,10 +34,70 @@ pub struct Erc20BuildResult {
     pub blob: Vec<u8>,
     pub root: [u8; 32],
     pub entry_count: usize,
-    /// Exact `(chain_id, contract)` subset whose built metadata/proof shape can
-    /// pass the production device verifier. Every source row remains committed
-    /// by `root`; this only narrows ERC-7730 interpolation enrollment.
+    /// Exact `(chain_id, contract)` set whose built metadata/proof shape passes
+    /// the production device verifier. Since 2026-11-14 [`build_db`] refuses a
+    /// DB holding any row that fails that verifier, so this is every committed
+    /// row; it is still derived from the shared predicate (not assumed) and it
+    /// is the set ERC-7730 interpolation enrollment and the descriptor
+    /// constant-token gate consult.
     pub capabilities: Erc20Capabilities,
+}
+
+/// Why `metadata_shape_is_device_verifiable` refuses a row, for the build
+/// error. The verdict itself always comes from that shared predicate (see
+/// [`build_db`]); this only names the first failing gate for a human.
+fn device_rule_violation(
+    decimals: u8,
+    name: &str,
+    symbol: &str,
+    proof_depth: usize,
+) -> Option<String> {
+    if metadata_shape_is_device_verifiable(
+        decimals,
+        name.as_bytes(),
+        symbol.as_bytes(),
+        proof_depth,
+    ) {
+        return None;
+    }
+    let field = |label: &str, value: &str| -> Option<String> {
+        let len = value.len();
+        if len == 0 {
+            Some(format!("{label} is empty"))
+        } else if len > MAX_DISPLAY_FIELD {
+            Some(format!(
+                "{label} too long ({len} bytes > {MAX_DISPLAY_FIELD}): {value:?}"
+            ))
+        } else if !value.bytes().all(|b| (0x20..0x7f).contains(&b)) {
+            Some(format!("{label} is not printable ASCII: {value:?}"))
+        } else {
+            None
+        }
+    };
+    Some(if decimals > MAX_DISPLAY_DECIMALS {
+        format!("decimals {decimals} > {MAX_DISPLAY_DECIMALS}")
+    } else if let Some(reason) = field("name", name) {
+        reason
+    } else if let Some(reason) = field("symbol", symbol) {
+        reason
+    } else if proof_depth > MAX_ERC20_PROOF_DEPTH {
+        format!("Merkle proof depth {proof_depth} > {MAX_ERC20_PROOF_DEPTH}")
+    } else {
+        format!(
+            "bundle for name {name:?} / symbol {symbol:?} at proof depth {proof_depth} \
+             exceeds the device bundle limit"
+        )
+    })
+}
+
+fn device_rule_error(row: &PreparedRow, address: &str, reason: &str) -> String {
+    format!(
+        "ERC-20 row chain_id={} address={address} fails the device verifier \
+         (tx/src/erc20/bundle.rs metadata_shape_is_device_verifiable): {reason}. \
+         The device would refuse this Merkle-committed row; fix secure/data/erc20*.json \
+         (python3 tools/build_erc20_db.py --normalize)",
+        row.chain_id,
+    )
 }
 
 /// Exact device-verifiable token identities in one authenticated ERC-20 DB.
@@ -78,23 +141,28 @@ pub fn build_db(json_path: &Path) -> Result<Erc20BuildResult, String> {
     }
 
     // 1. Validate every row, parse addresses, build sortable records.
+    //
+    // HARD GATE (2026-11-14): every row must pass the production device
+    // verifier's metadata policy. A row that fails it was previously committed
+    // to the root anyway and could never render on the device (166 such rows
+    // had crept in via on-chain Unicode names). Checked here with a zero-depth
+    // proof (metadata only), and again below once the real proof depth is
+    // known (the complete bundle-length bound).
     let mut prepared: Vec<PreparedRow> = Vec::with_capacity(records.len());
     for r in &records {
-        if r.name.len() > 255 {
-            return Err(format!("name too long (>255 bytes): {:?}", r.name));
-        }
-        if r.symbol.len() > 255 {
-            return Err(format!("symbol too long (>255 bytes): {:?}", r.symbol));
-        }
         let contract = parse_hex_address(&r.address)?;
-        prepared.push(PreparedRow {
+        let row = PreparedRow {
             chain_id: r.chain_id,
             contract,
             name: r.name.clone(),
             symbol: r.symbol.clone(),
             decimals: r.decimals,
             flags: r.flags,
-        });
+        };
+        if let Some(reason) = device_rule_violation(row.decimals, &row.name, &row.symbol, 0) {
+            return Err(device_rule_error(&row, &r.address, &reason));
+        }
+        prepared.push(row);
     }
 
     // 2. Sort by (chain_id, contract) for runtime binary search.
@@ -198,10 +266,21 @@ pub fn build_db(json_path: &Path) -> Result<Erc20BuildResult, String> {
     let root = tree.root();
     let proof_depth = tree.depth();
 
+    // Second half of the hard gate: with the exact proof depth known, every
+    // row's complete bundle must fit the device's bundle bound.
+    for row in &prepared {
+        if let Some(reason) =
+            device_rule_violation(row.decimals, &row.name, &row.symbol, proof_depth)
+        {
+            let address = format!("0x{}", hex::encode(row.contract));
+            return Err(device_rule_error(row, &address, &reason));
+        }
+    }
+
     // Derive ERC-7730 interpolation authority only after the exact proof shape
-    // is known, using the production verifier's own policy predicate. Rows
-    // that fail this policy still remain in `prepared`, the Merkle tree, blob,
-    // and root so ordinary ERC-20 DB behavior is unchanged.
+    // is known, using the production verifier's own policy predicate. After
+    // the gate above this is every row; deriving it (rather than assuming it)
+    // keeps the enrollment authority tied to the verifier's own predicate.
     let capabilities = Erc20Capabilities {
         keys: prepared
             .iter()
@@ -636,12 +715,10 @@ mod tests {
         assert!(proofs_off > pool_off);
     }
 
-    #[test]
-    fn capabilities_exactly_match_device_verifiable_built_rows() {
+    fn mixed_policy_cases() -> Vec<(u8, String, String, u8, bool)> {
         // The first two rows exercise every inclusive metadata boundary. The
-        // remaining rows cross one gate at a time. All rows must remain in the
-        // Merkle DB; only ERC-7730 interpolation capability is filtered.
-        let cases: Vec<(u8, String, String, u8, bool)> = vec![
+        // remaining rows cross one gate at a time.
+        vec![
             (0x01, " ".into(), "~".into(), 0, true),
             (0x02, "A".repeat(64), "Z".repeat(64), 36, true),
             (0x03, "Name".into(), "SYM".into(), 37, false),
@@ -654,7 +731,11 @@ mod tests {
             (0x0a, "Name".into(), "S\u{1f}".into(), 18, false),
             (0x0b, "Name".into(), "S\u{7f}".into(), 18, false),
             (0x0c, "Caf\u{e9}".into(), "SYM".into(), 18, false),
-        ];
+            (0x0d, "Name".into(), "USD\u{20ae}0".into(), 6, false),
+        ]
+    }
+
+    fn case_json(cases: &[(u8, String, String, u8, bool)]) -> String {
         let rows: Vec<serde_json::Value> = cases
             .iter()
             .map(|(suffix, name, symbol, decimals, _)| {
@@ -667,51 +748,108 @@ mod tests {
                 })
             })
             .collect();
-        let input = serde_json::to_string(&rows).expect("serialize fixture");
-        let fixture = write_json(&input);
-        let result = build_db(fixture.path()).expect("build mixed-policy DB");
+        serde_json::to_string(&rows).expect("serialize fixture")
+    }
 
-        assert_eq!(result.entry_count, cases.len());
-        assert_eq!(result.capabilities.len(), 2);
-        round_trip_check(&result.blob, fixture.path(), &result.root)
-            .expect("every row, including non-capabilities, remains Merkle-committed");
-
-        let proof_depth = u32::from_le_bytes(result.blob[24..28].try_into().unwrap()) as usize;
-        for (suffix, name, symbol, decimals, expected) in &cases {
-            let contract = parse_hex_address(&fixture_addr(*suffix)).unwrap();
+    /// Every row the device verifier would refuse is a BUILD ERROR naming the
+    /// row, never a silently Merkle-bound dead leaf (before 2026-11-14 such
+    /// rows were built into the root and only withheld their capability).
+    #[test]
+    fn negative_build_db_rejects_every_row_failing_the_device_rule() {
+        for case in mixed_policy_cases() {
+            let (suffix, name, symbol, decimals, expected) = &case;
             assert_eq!(
                 metadata_shape_is_device_verifiable(
                     *decimals,
                     name.as_bytes(),
                     symbol.as_bytes(),
-                    proof_depth,
+                    0,
                 ),
                 *expected,
                 "shared verifier predicate mismatch for suffix 0x{suffix:02x}",
             );
-            assert_eq!(
-                result.capabilities.contains(1, &contract),
-                *expected,
-                "capability mismatch for suffix 0x{suffix:02x}",
-            );
+            if *expected {
+                continue;
+            }
+            // Alone, and next to a valid row: either way the build fails.
+            for input in [
+                case_json(std::slice::from_ref(&case)),
+                case_json(&[mixed_policy_cases()[0].clone(), case.clone()]),
+            ] {
+                let fixture = write_json(&input);
+                let err = build_db(fixture.path())
+                    .err()
+                    .unwrap_or_else(|| panic!("suffix 0x{suffix:02x} must be rejected"));
+                assert!(
+                    err.contains("chain_id=1")
+                        && err.contains(&fixture_addr(*suffix))
+                        && err.contains("fails the device verifier"),
+                    "error must name the row: {err}",
+                );
+            }
         }
+    }
 
-        // Non-vacuous cross-verifier control: a built, capability-enrolled row
-        // verifies on the production parser. A built row with a valid Merkle
-        // proof but decimals=37 remains committed and is refused by that same
-        // parser, exactly matching its absent capability.
-        let valid_contract = parse_hex_address(&fixture_addr(0x01)).unwrap();
-        let invalid_contract = parse_hex_address(&fixture_addr(0x03)).unwrap();
-        assert!(pqsigner_tx::erc20::bundle::verify_erc20_bundle(
-            &built_bundle(&result, 1, &valid_contract),
-            &result.root,
-        )
-        .is_some());
-        assert!(pqsigner_tx::erc20::bundle::verify_erc20_bundle(
-            &built_bundle(&result, 1, &invalid_contract),
-            &result.root,
-        )
-        .is_none());
+    #[test]
+    fn negative_build_db_rejection_names_the_reason() {
+        let expect = |suffix: u8, needle: &str| {
+            let case = mixed_policy_cases()
+                .into_iter()
+                .find(|c| c.0 == suffix)
+                .expect("case");
+            let fixture = write_json(&case_json(&[case]));
+            let err = build_db(fixture.path()).err().expect("must be rejected");
+            assert!(err.contains(needle), "suffix 0x{suffix:02x}: {err}");
+        };
+        expect(0x03, "decimals 37 > 36");
+        expect(0x04, "name is empty");
+        expect(0x05, "symbol is empty");
+        expect(0x06, "name too long");
+        expect(0x07, "symbol too long");
+        expect(0x08, "name is not printable ASCII");
+        expect(0x0b, "symbol is not printable ASCII");
+        expect(0x0c, "name is not printable ASCII");
+        expect(0x0d, "symbol is not printable ASCII");
+    }
+
+    #[test]
+    fn capabilities_are_every_row_of_a_device_verifiable_db() {
+        let cases: Vec<_> = mixed_policy_cases().into_iter().filter(|c| c.4).collect();
+        assert_eq!(cases.len(), 2);
+        let fixture = write_json(&case_json(&cases));
+        let result = build_db(fixture.path()).expect("build boundary DB");
+
+        assert_eq!(result.entry_count, cases.len());
+        assert_eq!(result.capabilities.len(), cases.len());
+        round_trip_check(&result.blob, fixture.path(), &result.root).expect("round-trip");
+
+        for (suffix, ..) in &cases {
+            let contract = parse_hex_address(&fixture_addr(*suffix)).unwrap();
+            assert!(result.capabilities.contains(1, &contract));
+            // Non-vacuous cross-verifier control: every built row verifies on
+            // the production parser.
+            assert!(pqsigner_tx::erc20::bundle::verify_erc20_bundle(
+                &built_bundle(&result, 1, &contract),
+                &result.root,
+            )
+            .is_some());
+        }
+    }
+
+    /// A row that fits the metadata rule but whose complete bundle would
+    /// exceed the device bound at the DB's real proof depth is rejected by the
+    /// second (post-tree) half of the gate. The reason helper names it.
+    #[test]
+    fn negative_device_rule_violation_names_bundle_bound() {
+        let reason = device_rule_violation(36, &"A".repeat(28), &"B".repeat(30), 32)
+            .expect("one byte over the bundle bound");
+        assert!(
+            reason.contains("exceeds the device bundle limit"),
+            "{reason}"
+        );
+        let reason = device_rule_violation(0, "A", "B", 33).expect("proof too deep");
+        assert!(reason.contains("proof depth 33"), "{reason}");
+        assert!(device_rule_violation(36, &"A".repeat(28), &"~".repeat(29), 32).is_none());
     }
 
     #[test]

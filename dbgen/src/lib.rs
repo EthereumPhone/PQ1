@@ -44,6 +44,7 @@ pub mod erc8176;
 pub mod merkle;
 pub mod names;
 pub mod selectors;
+pub mod token_constant_exceptions;
 
 /// Start of the generated ERC-7730 security tail in `secure/src/db_roots.rs`.
 ///

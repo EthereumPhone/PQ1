@@ -2327,8 +2327,17 @@ test-unit: ## Rust workspace unit tests (host)
 #
 # Or as part of `make prod-erc7730-provenance-check` (Phase 2 onwards).
 .PHONY: check-codegen generate-erc7730-descriptors check-erc7730-build-input-shadows check-erc7730-descriptors check-erc7730-forced-eligible-binding cross-parity-erc7730 cross-parity-erc8213 erc7730-cross-parity test-erc7730-proxy-drift erc7730-proxy-drift check-solidity-constants check-research-bundles erc8176-coverage erc8176-coverage-test
-check-codegen: check-erc7730-descriptors check-solidity-constants check-research-bundles
+check-codegen: check-erc20-db check-erc7730-descriptors check-solidity-constants check-research-bundles
 	@echo "==> codegen artifacts in sync"
+
+# The ERC-20 metadata DB: every row device-verifiable after the ONE shared
+# sanitizer (tools/erc20_text.py). dbgen hard-fails on a row the device would
+# refuse; this also proves the checked-in JSON is exactly the sanitizer's fixed
+# point and runs the sanitizer's unit tests.
+.PHONY: check-erc20-db
+check-erc20-db: ## Check secure/data/erc20*.json is sanitizer-normal + sanitizer unit tests
+	@PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tools/test_erc20_text.py
+	@PYTHONDONTWRITEBYTECODE=1 python3 tools/build_erc20_db.py --normalize --check
 
 cross-parity-erc8213: ## Compare live PQ1 ERC-8213 hashes with a lock-pinned independent Keccak implementation
 	@command -v uv >/dev/null 2>&1 || { echo "cross-parity-erc8213: FAIL — uv is required" >&2; exit 1; }
