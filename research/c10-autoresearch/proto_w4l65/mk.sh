@@ -7,7 +7,10 @@ rm -rf "$P"; mkdir -p "$P"
 rsync -a --exclude target "$R/sphincs-c10/" "$P/sphincs-c10/"
 rsync -a --exclude target "$D/host_v2/" "$P/host_v2/"
 rsync -a --exclude target "$D/bench_v2/" "$P/bench_v2/"
-cp "$D/harness/run_flash.sh" "$P/run_flash_sig.sh"; cp "$D/evaluate.py" "$P/evaluate_sig.py"
+rsync -a --exclude target "$R/hw/" "$P/hw/"
+rsync -a --exclude target "$D/bench_v2f/" "$P/bench_v2f/"
+rsync -a --exclude target "$D/bench_avg_v2f/" "$P/bench_avg_v2f/"
+cp "$D/harness/run_flash.sh" "$P/run_flash_sig.sh"; cp "$D/evaluate.py" "$P/evaluate_sig.py"; cp "$D/harness/run_profile.sh" "$P/run_profile_sig.sh"
 cp "$R/Cargo.lock" "$P/sphincs-c10/Cargo.lock"
 python3 "$D/proto_w4l65/apply.py" "$P"
 # Rust == Python (c10v2_ref.py --variant w4l65) KATs and +C near-misses; draft 0.3 KATs with the flag off
@@ -21,4 +24,12 @@ python3 "$D/proto_w4l65/apply.py" "$P"
 cd "$D"
 for v in d03 w4l65; do F=""; [ $v = w4l65 ] && F=w4l65
   CRATE=target/proto-w4l65/bench_v2 LIBNAME=c10_bench_v2 LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN -DICACHE_2WAY" BENCH_FEATURES=$F ./build_any.sh out/proto-$v.elf
+done
+# round 17: the fused one-block driver (copy of hw/), draft 0.3 and w4l65
+for v in d03 w4l65; do F=""; [ $v = w4l65 ] && F=w4l65
+  CRATE=target/proto-w4l65/bench_v2f LIBNAME=c10_bench_v2f LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN -DICACHE_2WAY" BENCH_FEATURES=$F ./build_any.sh out/proto-f-$v.elf
+done
+# 16-message means (grind luck averaged), fused
+for v in d03 w4l65; do F=""; [ $v = w4l65 ] && F=w4l65
+  CRATE=target/proto-w4l65/bench_avg_v2f LIBNAME=c10_bench_avg_v2f LDSCRIPT=link_flash.ld EXTRA_CFLAGS="-DFLASHRUN -DICACHE_2WAY" BENCH_FEATURES=$F ./build_any.sh out/proto-avg-f-$v.elf
 done

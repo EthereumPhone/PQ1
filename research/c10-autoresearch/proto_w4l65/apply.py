@@ -140,8 +140,8 @@ pub const TH_MULTI_MAX: usize = 43;
 #[cfg(feature = "v2-w4l65")]
 pub const TH_MULTI_MAX: usize = 65;''')])
 edit("sphincs-c10/src/lib.rs", [('''#[cfg(all(feature = "near-miss-gen", feature = "v2-split810"))]''',
-                                 '''#[cfg(all(feature = "v2-w4l65", any(feature = "near-miss-gen", feature = "v2-fused", feature = "v2-prf2")))]
-compile_error!("the `v2-w4l65` prototype is generic-path only (the fused driver is specialised to l = 43, w = 8)");
+                                 '''#[cfg(all(feature = "v2-w4l65", any(feature = "near-miss-gen", feature = "v2-prf2")))]
+compile_error!("the `v2-w4l65` prototype supports neither `near-miss-gen` nor `v2-prf2`");
 #[cfg(all(feature = "near-miss-gen", feature = "v2-split810"))]''')])
 edit("sphincs-c10/src/lib.rs", [(") -> (u32, [u8; 32], [u8; 43]) {", ") -> (u32, [u8; 32], [u8; crate::params::L]) {")])   # sim_internals::find_count
 edit("sphincs-c10/tests/v2_kat.rs", [('''fn tag() -> &'static str {
@@ -171,8 +171,108 @@ edit("bench_v2/src/lib.rs", [('include!("../../inputs.rs");', 'include!("../../.
 
 # ── 4. the frozen runner / evaluator read 4,008-B signatures: parameterized copies ───────────────────────────
 edit("run_flash_sig.sh", [("read_memory \\$a 32 1002]", "read_memory \\$a 32 ${SIGW:-1002}]")])
+edit("run_profile_sig.sh", [("read_memory \\$a 32 1002]", "read_memory \\$a 32 ${SIGW:-1002}]")])
 edit("evaluate_sig.py", [("log, golden = sys.argv[1], open(sys.argv[2], 'rb').read()\n",
                           "log, golden = sys.argv[1], open(sys.argv[2], 'rb').read()\nSL = int(sys.argv[3]) if len(sys.argv) > 3 else 4008\n"),
                          ("[])[:4008]\nb1", "[])[:SL]\nb1"), ("s1 or [])[:4008]", "s1 or [])[:SL]"),
                          ("golden[16:16 + 4008]", "golden[16:16 + SL]"), ("golden[16 + 4008:]", "golden[16 + SL:]")])
+
+# ── 5. round 17: the w = 4 fused driver, on a COPY of pqsigner-hw (hw/) ──────────────────────────────────────
+# The v2 DATATYPE-00 key loop already takes the chain count and chain length from its context and the ci shift
+# from V2_CI_LSB (1 for ci at A7 bits 23..17, as split810), so the asm is reused unchanged; the Rust wrappers'
+# 43 / 688 / 178 / 712 become L-derived, the T_43 feed and the w = 8 asm search are compiled out, and the Rust
+# search gets a 2-bit digit sum over the low 130 bits.
+edit("hw/Cargo.toml", [("edition.workspace = true", 'edition = "2021"'),
+                       ("cortex-m = { workspace = true }", 'cortex-m = "0.7"'),
+                       ("[dependencies.cortex-m-semihosting]\nworkspace = true\n", '[dependencies.cortex-m-semihosting]\nversion = "0.5"\n'),
+                       ('v2-split810 = ["v2"]', 'v2-split810 = ["v2"]\n# RESEARCH PROTOTYPE (round 17, proto_w4l65): the fused driver for w = 4, l = 65, T = 125.\nv2-w4l65 = ["v2"]')])
+hp = f"{P}/hw/src/hash.rs"
+t = open(hp).read()
+n_t43, n_srch = t.count('feature = "v2-asm-t43"'), t.count('feature = "v2-asm-search"')
+assert n_t43 > 0 and n_srch > 0, (n_t43, n_srch)
+t = t.replace('feature = "v2-asm-t43"', 'all(feature = "v2-asm-t43", not(feature = "v2-w4l65"))')
+t = t.replace('feature = "v2-asm-search"', 'all(feature = "v2-asm-search", not(feature = "v2-w4l65"))')
+open(hp, "w").write(t)
+edit("hw/src/hash.rs", [
+    ("""#[cfg(all(feature = "v2", not(feature = "v2-split810")))]
+const V2_CI_LSB: u32 = 2;
+#[cfg(all(feature = "v2", feature = "v2-split810"))]
+const V2_CI_LSB: u32 = 1;""",
+     """#[cfg(all(feature = "v2", not(any(feature = "v2-split810", feature = "v2-w4l65"))))]
+const V2_CI_LSB: u32 = 2;
+#[cfg(all(feature = "v2", any(feature = "v2-split810", feature = "v2-w4l65")))]
+const V2_CI_LSB: u32 = 1;
+/// WOTS chain count: 43, or 65 under the RESEARCH PROTOTYPE `v2-w4l65` (ci at A7 bits 23..17, word LSB 1).
+#[cfg(all(feature = "v2", not(feature = "v2-w4l65")))]
+const V2_L: u32 = 43;
+#[cfg(all(feature = "v2", feature = "v2-w4l65"))]
+const V2_L: u32 = 65;
+/// Words of the T_l preimage (S, A7 of WOTS_PK, a zero byte, then l values): 178 (712 B) or 266 (1,064 B).
+#[cfg(feature = "v2")]
+const V2_PK_WORDS: usize = 6 + 4 * V2_L as usize;
+#[cfg(all(feature = "v2-w4l65", any(feature = "v2-prf2", feature = "v2-split810", feature = "v2-fold-sum")))]
+compile_error!("`v2-w4l65` (research prototype) builds with neither prf2, split810 nor fold-sum");"""),
+    ("""        let mut ctx = [sk_seed as u32, p0, p1, s[0], s[1], s[2], s[3], a0, low24, steps, 43, out as u32];""",
+     """        let mut ctx = [sk_seed as u32, p0, p1, s[0], s[1], s[2], s[3], a0, low24, steps, V2_L, out as u32];"""),
+    ("""    if steps != 0 && ((out as usize).saturating_add(688) <= sk_seed as usize""",
+     """    if steps != 0 && ((out as usize).saturating_add(16 * V2_L as usize) <= sk_seed as usize"""),
+    ("""    let mut ci = 0u32;
+    while ci < 43 {
+        let c = ci << V2_CI_LSB;""", """    let mut ci = 0u32;
+    while ci < V2_L {
+        let c = ci << V2_CI_LSB;"""),
+    ("""    let mut buf = core::mem::MaybeUninit::<[u32; 178]>::uninit();""",
+     """    let mut buf = core::mem::MaybeUninit::<[u32; V2_PK_WORDS]>::uninit();"""),
+    ("""        pqsigner_sha256_oneshot16(b.cast::<u8>(), 712, out);""",
+     """        pqsigner_sha256_oneshot16(b.cast::<u8>(), 4 * V2_PK_WORDS, out);"""),
+    ("""        let next = c.wrapping_add(1);
+        let more = next != end;
+        if more {
+            issue(next);
+        }
+        // Digits 0..31 first""", """        let next = c.wrapping_add(1);
+        let more = next != end;
+        if more {
+            issue(next);
+        }
+        // RESEARCH PROTOTYPE `v2-w4l65`: 65 two-bit digits, the low 130 bits (c10v2_ref.py --variant w4l65);
+        // the caller re-checks the accepted digest with sphincs-c10's own digit sum.
+        #[cfg(feature = "v2-w4l65")]
+        {
+            #[inline(always)]
+            fn s2(v: u32) -> u32 {
+                let s = (v & 0x3333_3333).wrapping_add((v >> 2) & 0x3333_3333);
+                let s = (s & 0x0F0F_0F0F).wrapping_add((s >> 4) & 0x0F0F_0F0F);
+                s.wrapping_mul(0x0101_0101) >> 24
+            }
+            let _ = g24;
+            let sum = s2(w7).wrapping_add(s2(w6)).wrapping_add(s2(w5)).wrapping_add(s2(w4)).wrapping_add(w3 & 3);
+            if sum == target {
+                let mut d = [0u32; 8];
+                if more {
+                    v2_collect(&mut d);
+                }
+                issue(c);
+                v2_collect(&mut d);
+                // SAFETY: `out` names 32 writable bytes.
+                unsafe { core::ptr::copy_nonoverlapping(d.as_ptr().cast::<u8>(), out, 32) };
+                return c;
+            }
+            if !more {
+                return end;
+            }
+            c = next;
+            continue;
+        }
+        #[allow(unreachable_code)]
+        // Digits 0..31 first"""),
+])
+edit("bench_v2f/Cargo.toml", [('path = "../../../sphincs-c10"', 'path = "../sphincs-c10"'), ('path = "../../../hw"', 'path = "../hw"'),
+                              ('hra-ldm = ["pqsigner-hw/hra-ldm"]', 'hra-ldm = ["pqsigner-hw/hra-ldm"]\nw4l65 = ["sphincs-c10/v2-w4l65", "pqsigner-hw/v2-w4l65"]')])
+edit("bench_v2f/src/lib.rs", [('include!("../../inputs.rs");', 'include!("../../../../inputs.rs");')])
+edit("bench_avg_v2f/Cargo.toml", [('path = "../../../sphincs-c10"', 'path = "../sphincs-c10"'), ('path = "../../../hw"', 'path = "../hw"'),
+                                  ('forslastprf = ["sphincs-c10/v2-fors-last-prf"]',
+                                   'forslastprf = ["sphincs-c10/v2-fors-last-prf"]\nw4l65 = ["sphincs-c10/v2-w4l65", "pqsigner-hw/v2-w4l65"]')])
+edit("bench_avg_v2f/src/lib.rs", [('include!("../../inputs.rs");', 'include!("../../../../inputs.rs");')])
+print(f"fused driver: replaced {n_t43} v2-asm-t43 and {n_srch} v2-asm-search predicates")
 print("applied")
