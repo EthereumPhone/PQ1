@@ -571,16 +571,17 @@ pub fn compiled_format_id() -> [u8; 32] {
     format_id(&COMPILED_FORMAT)
 }
 
-/// Bootstrap master: HMAC-SHA512(key = "pq1-c10-fmt-boot" ‖ fid, msg = bip39_seed) for account 0, and
-/// HMAC-SHA512(key = "pq1-c10-fmt-boot-acct" ‖ fid, msg = bip39_seed ‖ be32(account)) otherwise. The keys differ
-/// from the stock "sphincs-c6-v1" / "sphincs-c6-v1-acct" and from each other for every fid.
+/// Bootstrap master: HMAC-SHA512(key = "pq1-c10-fmt-boot-acc0" ‖ fid, msg = bip39_seed) for account 0, and
+/// HMAC-SHA512(key = "pq1-c10-fmt-boot-acct" ‖ fid, msg = bip39_seed ‖ be32(account)) otherwise. Both keys are
+/// 53 B (< the 128-B HMAC-SHA512 block, never prehashed) and of EQUAL length, so their zero-padded forms differ
+/// for every pair of fids; they also differ from the stock "sphincs-c6-v1" / "sphincs-c6-v1-acct".
 #[cfg(feature = "format-kdf")]
 #[must_use]
 pub fn bootstrap_master_with_format(fid: &[u8; 32], bip39_seed: &[u8; 64], account_index: u32) -> [u8; 64] {
     if account_index == 0 {
-        let mut key = [0u8; 48];
-        key[0..16].copy_from_slice(b"pq1-c10-fmt-boot");
-        key[16..48].copy_from_slice(fid);
+        let mut key = [0u8; 53];
+        key[0..21].copy_from_slice(b"pq1-c10-fmt-boot-acc0");
+        key[21..53].copy_from_slice(fid);
         hmac_sha512_bytes(&key, bip39_seed)
     } else {
         let mut key = [0u8; 53];
@@ -595,16 +596,16 @@ pub fn bootstrap_master_with_format(fid: &[u8; 32], bip39_seed: &[u8; 64], accou
     }
 }
 
-/// Slot master: sha256("pq1-c10-fmt-slot" ‖ fid ‖ bip39_seed ‖ 0x00) for account 0 (113 B), and
+/// Slot master: sha256("pq1-c10-fmt-slot-acc0" ‖ fid ‖ bip39_seed ‖ 0x00) for account 0 (118 B), and
 /// sha256("pq1-c10-fmt-slot-acct" ‖ fid ‖ bip39_seed ‖ be32(account)) otherwise (121 B).
 #[cfg(feature = "format-kdf")]
 #[must_use]
 pub fn slot_master_with_format(fid: &[u8; 32], bip39_seed: &[u8; 64], account_index: u32) -> [u8; 32] {
     if account_index == 0 {
-        let mut buf = [0u8; 113];
-        buf[0..16].copy_from_slice(b"pq1-c10-fmt-slot");
-        buf[16..48].copy_from_slice(fid);
-        buf[48..112].copy_from_slice(bip39_seed);
+        let mut buf = [0u8; 118];
+        buf[0..21].copy_from_slice(b"pq1-c10-fmt-slot-acc0");
+        buf[21..53].copy_from_slice(fid);
+        buf[53..117].copy_from_slice(bip39_seed);
         let out = sha256_bytes(&buf);
         buf.zeroize();
         out

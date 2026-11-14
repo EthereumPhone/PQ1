@@ -4,9 +4,9 @@
 #![cfg(feature = "format-kdf")]
 use hmac::{Hmac, Mac};
 use pqsigner_domain::{
-    bootstrap_master_with_format, compiled_format_id, derive_c10_master_from_bip39_seed, format_descriptor, format_id,
-    slot_entropy, slot_master_entropy_from_bip39, slot_master_with_format, slot_seeds_with_format, FormatParams,
-    COMPILED_FORMAT, FORMAT_DESCRIPTOR_LEN,
+    bootstrap_master_with_format, compiled_format_id, derive_c10_master_from_bip39_seed, derive_c10_slot_keypair,
+    format_descriptor, format_id, slot_entropy, slot_master_entropy_from_bip39, slot_master_with_format,
+    slot_seeds_with_format, FormatParams, COMPILED_FORMAT, FORMAT_DESCRIPTOR_LEN,
 };
 use sha2::{Digest, Sha256, Sha512};
 use std::collections::HashSet;
@@ -194,5 +194,79 @@ fn slot_seeds_bind_the_format_directly() {
         let (sk, pk) = slot_seeds_with_format(&format_id(&f), &e);
         assert!(seen.insert(sk.to_vec()), "slot sk_seed ignores the format");
         assert!(seen.insert(pk[..16].to_vec()), "slot pk_seed ignores the format");
+    }
+}
+
+// ---- independent formulas and pinned vectors (Astra r17: the new labels and encodings need their own pins) ----
+
+fn ind_boot(fid: &[u8; 32], seed: &[u8; 64], acct: u32) -> [u8; 64] {
+    let tag: &[u8] = if acct == 0 { b"pq1-c10-fmt-boot-acc0" } else { b"pq1-c10-fmt-boot-acct" };
+    let key = [tag, &fid[..]].concat();
+    assert_eq!(key.len(), 53);
+    let msg = if acct == 0 { seed.to_vec() } else { [&seed[..], &acct.to_be_bytes()[..]].concat() };
+    let mut m = <Hmac<Sha512> as Mac>::new_from_slice(&key).unwrap();
+    m.update(&msg);
+    m.finalize().into_bytes().into()
+}
+
+fn ind_slot(fid: &[u8; 32], seed: &[u8; 64], acct: u32) -> [u8; 32] {
+    let tag: &[u8] = if acct == 0 { b"pq1-c10-fmt-slot-acc0" } else { b"pq1-c10-fmt-slot-acct" };
+    let tail = if acct == 0 { vec![0u8] } else { acct.to_be_bytes().to_vec() };
+    Sha256::digest([tag, &fid[..], &seed[..], &tail[..]].concat()).into()
+}
+
+fn ind_seeds(fid: &[u8; 32], e: &[u8; 32]) -> ([u8; 32], [u8; 16]) {
+    let sk: [u8; 32] = Sha256::digest([&b"slot_c10_sk_seed"[..], &fid[..], &e[..]].concat()).into();
+    let pk: [u8; 32] = Sha256::digest([&b"slot_c10_pk_seed"[..], &fid[..], &e[..]].concat()).into();
+    (sk, pk[..16].try_into().unwrap())
+}
+
+#[test]
+fn kdf_encodings_match_independent_formulas() {
+    let e = [0x42u8; 32];
+    for (_, f) in known() {
+        let fid = format_id(&f);
+        for seed in seeds() {
+            for acct in [0u32, 1, 255] {
+                assert_eq!(bootstrap_master_with_format(&fid, &seed, acct), ind_boot(&fid, &seed, acct));
+                assert_eq!(slot_master_with_format(&fid, &seed, acct), ind_slot(&fid, &seed, acct));
+            }
+        }
+        let (sk, pk) = slot_seeds_with_format(&fid, &e);
+        let (isk, ipk) = ind_seeds(&fid, &e);
+        assert_eq!(sk, isk);
+        assert_eq!(&pk[..16], &ipk[..]);
+        assert_eq!(&pk[16..], &[0u8; 16]);
+    }
+}
+
+/// Pinned once from an independent Python implementation of the same layouts (ledger round 17 §5).
+#[test]
+fn pinned_vectors_draft03() {
+    let h = |b: &[u8]| b.iter().map(|x| format!("{x:02x}")).collect::<String>();
+    let fid = format_id(&d03());
+    let seed = seeds()[0];
+    assert_eq!(h(&fid), "e02c1a8132fb1b9094f69f189d26b0e7fc0dcebbe752edc300d180f81179dca7");
+    assert_eq!(h(&bootstrap_master_with_format(&fid, &seed, 0)[..32]), "5e41749c032f1080620d725c35965969e5575c44e0f8f40b4d95992a895e3753");
+    assert_eq!(h(&bootstrap_master_with_format(&fid, &seed, 5)[..32]), "fada5c8dba5441e61e2180f4f29f624bacbbe6b54e1973a99200f992cd7fab7f");
+    assert_eq!(h(&slot_master_with_format(&fid, &seed, 0)), "a3d6bfd0deb8235d1da024c2204f04bc424528470534209c784c4a0d5dbb5cab");
+    assert_eq!(h(&slot_master_with_format(&fid, &seed, 5)), "1726df8caa4fb512984010df32121471b9b0c5acbd7cc13ee445b3c784e2e150");
+    let (sk, pk) = slot_seeds_with_format(&fid, &[0x42u8; 32]);
+    assert_eq!(h(&sk), "bd16a5d15e97d6b90e153b67bd789ee1692de63b10af2e5e282a3c5d7c0ef60a");
+    assert_eq!(h(&pk[..16]), "3cf8980313cbfaed4cf03a879eb1e015");
+}
+
+/// The public slot-keypair route (slot master -> slot entropy -> slot seeds -> keygen) is the format-bound one.
+#[test]
+fn public_slot_keypair_route_is_format_bound() {
+    let seed = seeds()[1];
+    for acct in [0u32, 3] {
+        let sm = slot_master_entropy_from_bip39(&seed, acct);
+        let (_key, pk_seed, _root) = derive_c10_slot_keypair(&sm, 1, 2);
+        let e = slot_entropy(&sm, 1, 2);
+        let (_, want) = slot_seeds_with_format(&compiled_format_id(), &e);
+        assert_eq!(pk_seed, want, "slot keypair does not use the format-bound seeds");
+        let stock: [u8; 32] = Sha256::digest([&b"slot_c10_pk_seed"[..], &e[..]].concat()).into();
+        assert_ne!(&pk_seed[..16], &stock[..16]);
     }
 }
