@@ -1,0 +1,177 @@
+#!/usr/bin/env python3
+"""apply.py <proto dir> — RESEARCH PROTOTYPE (round 16): the w4l65 frontier set (c10v2_ref.py --variant w4l65:
+WOTS+C w = 4, l = 65, T = 125, A7 ci 7 bits at 23..17, 4,712-B signatures) as an off-by-default Cargo feature
+`v2-w4l65` on a COPY of sphincs-c10, plus copies of the host golden generator and the kit bench pointed at it.
+
+Why a copy: params.rs, wots.rs, shuffle.rs and hash.rs are pinned whole-file by the extraction-freshness gate
+(contracts/verification/scripts/check_extraction_freshness.py); editing them would need re-extraction, re-proof
+and re-pinning. The product crate stays byte-identical; this script is the whole delta. Every edit is an exact
+string replacement asserted to occur once, so a drifted source fails loudly instead of half-applying.
+"""
+import sys
+
+P = sys.argv[1]
+
+
+def edit(path, pairs):
+    p = f"{P}/{path}"
+    s = open(p).read()
+    for old, new in pairs:
+        assert s.count(old) == 1, (path, old[:70], s.count(old))
+        s = s.replace(old, new)
+    open(p, "w").write(s)
+
+
+# ── 1. the variant (the part that would land in sphincs-c10 behind the flag) ──────────────────────────────────
+edit("sphincs-c10/Cargo.toml", [('''v2-split810 = ["v2"]
+''', '''v2-split810 = ["v2"]
+# RESEARCH PROTOTYPE (round 16, research/c10-autoresearch/proto_w4l65; c10v2_ref.py --variant w4l65): WOTS+C
+# w = 4, l = 65, target sum 125; A7 ci 7 bits at 23..17; 4,712-B signatures. Generic v2 path only.
+v2-w4l65 = ["v2"]
+''')])
+edit("sphincs-c10/src/params.rs", [
+    ('''/// Winternitz parameter.
+pub const W: usize = 8;
+
+/// log2(W).
+pub const LOG_W: usize = 3;
+
+/// WOTS chain count.
+pub const L: usize = 43;
+
+/// WOTS+C target digit sum for count-grinding.
+#[cfg(not(feature = "v2-ts200"))]
+pub const TARGET_SUM: usize = 205;''',
+     '''/// Winternitz parameter.
+#[cfg(not(feature = "v2-w4l65"))]
+pub const W: usize = 8;
+/// RESEARCH PROTOTYPE `v2-w4l65`: w = 4, l = 65, target sum 125.
+#[cfg(feature = "v2-w4l65")]
+pub const W: usize = 4;
+
+/// log2(W).
+#[cfg(not(feature = "v2-w4l65"))]
+pub const LOG_W: usize = 3;
+#[cfg(feature = "v2-w4l65")]
+pub const LOG_W: usize = 2;
+
+/// WOTS chain count.
+#[cfg(not(feature = "v2-w4l65"))]
+pub const L: usize = 43;
+#[cfg(feature = "v2-w4l65")]
+pub const L: usize = 65;
+
+#[cfg(all(feature = "v2-w4l65", feature = "v2-ts200"))]
+compile_error!("`v2-w4l65` sets its own target sum");
+/// WOTS+C target digit sum for count-grinding.
+#[cfg(feature = "v2-w4l65")]
+pub const TARGET_SUM: usize = 125;
+#[cfg(not(any(feature = "v2-ts200", feature = "v2-w4l65")))]
+pub const TARGET_SUM: usize = 205;'''),
+    ('''const _: () = assert!(SIG_HT_LAYER == 836);
+const _: () = assert!(SIGNATURE_LEN == 4008);''',
+     '''#[cfg(not(feature = "v2-w4l65"))]
+const _: () = assert!(SIG_HT_LAYER == 836);
+#[cfg(not(feature = "v2-w4l65"))]
+const _: () = assert!(SIGNATURE_LEN == 4008);
+#[cfg(feature = "v2-w4l65")]
+const _: () = assert!(SIG_HT_LAYER == 1188 && SIGNATURE_LEN == 4712);'''),
+])
+edit("sphincs-c10/src/wots.rs", [
+    ('''pub(crate) fn digit_sum(digest: &[u8; 32]) -> usize {
+    let mut sum: usize = 0;''',
+     '''#[cfg(not(feature = "v2-w4l65"))]
+pub(crate) fn digit_sum(digest: &[u8; 32]) -> usize {
+    let mut sum: usize = 0;'''),
+    ('''const _: () = assert!(L == 43 && LOG_W == 3 && W_MASK == 7 && L * LOG_W == 5 * 24 + 9);''',
+     '''#[cfg(not(feature = "v2-w4l65"))]
+const _: () = assert!(L == 43 && LOG_W == 3 && W_MASK == 7 && L * LOG_W == 5 * 24 + 9);
+/// RESEARCH PROTOTYPE `v2-w4l65`: the plain sum of the extracted digits.
+#[cfg(feature = "v2-w4l65")]
+pub(crate) fn digit_sum(digest: &[u8; 32]) -> usize {
+    let d = extract_digits(digest);
+    let mut sum = 0;
+    for i in 0..L {
+        sum += d[i] as usize;
+    }
+    sum
+}'''),
+])
+edit("sphincs-c10/src/shuffle.rs", [
+    ('''pub fn fisher_yates(seed: &[u8; 32], n: usize) -> [u8; 64] {
+    debug_assert!(n <= 64);
+
+    let mut buf = [0u8; 64];''',
+     '''pub fn fisher_yates(seed: &[u8; 32], n: usize) -> [u8; SHUFFLE_CAP] {
+    debug_assert!(n <= SHUFFLE_CAP);
+
+    let mut buf = [0u8; SHUFFLE_CAP];'''),
+    ('''#[inline(never)]
+#[must_use]
+pub fn fisher_yates(''',
+     '''/// Permutation capacity: 64, or 65 under the RESEARCH PROTOTYPE `v2-w4l65` (l = 65). n = 65 draws
+/// 2 * 64 = 128 stream bytes, exactly the 4 precomputed blocks; the Lemire bound stays < 2^22.
+#[cfg(not(feature = "v2-w4l65"))]
+pub const SHUFFLE_CAP: usize = 64;
+#[cfg(feature = "v2-w4l65")]
+pub const SHUFFLE_CAP: usize = 65;
+
+#[inline(never)]
+#[must_use]
+pub fn fisher_yates('''),
+])
+edit("sphincs-c10/src/v2hash.rs", [
+    ('''    assert!(ci < (1 << 6) && cp < 16 && ha < (1 << 11));''',
+     '''    assert!(ci < (1 << CI_BITS) && cp < 16 && ha < (1 << 11));'''),
+    ('''const CI_SHIFT: u32 = KP_SHIFT - 6;''',
+     '''/// `ci`'s width: 6 bits, 7 under the RESEARCH PROTOTYPE `v2-w4l65` (ci <= 64), at 23..17.
+#[cfg(not(feature = "v2-w4l65"))]
+const CI_BITS: u32 = 6;
+#[cfg(feature = "v2-w4l65")]
+const CI_BITS: u32 = 7;
+#[cfg(all(feature = "v2-w4l65", feature = "v2-split810"))]
+compile_error!("`v2-w4l65` and `v2-split810` both re-lay out ci");
+const CI_SHIFT: u32 = KP_SHIFT - CI_BITS;'''),
+])
+edit("sphincs-c10/src/hash.rs", [('''pub const TH_MULTI_MAX: usize = 43;''',
+                                  '''#[cfg(not(feature = "v2-w4l65"))]
+pub const TH_MULTI_MAX: usize = 43;
+/// RESEARCH PROTOTYPE `v2-w4l65`: the WOTS public key compresses L = 65 values.
+#[cfg(feature = "v2-w4l65")]
+pub const TH_MULTI_MAX: usize = 65;''')])
+edit("sphincs-c10/src/lib.rs", [('''#[cfg(all(feature = "near-miss-gen", feature = "v2-split810"))]''',
+                                 '''#[cfg(all(feature = "v2-w4l65", any(feature = "near-miss-gen", feature = "v2-fused", feature = "v2-prf2")))]
+compile_error!("the `v2-w4l65` prototype is generic-path only (the fused driver is specialised to l = 43, w = 8)");
+#[cfg(all(feature = "near-miss-gen", feature = "v2-split810"))]''')])
+edit("sphincs-c10/tests/v2_kat.rs", [('''fn tag() -> &'static str {
+    match''', '''fn tag() -> &'static str {
+    if cfg!(feature = "v2-w4l65") {
+        return "w4l65";
+    }
+    match''')])
+
+# ── 2. make the copy build on its own (out of the root workspace, research paths) ──────────────────────────
+edit("sphincs-c10/Cargo.toml", [("edition.workspace = true", 'edition = "2021"'),
+                                ('zeroize = { workspace = true, features = ["zeroize_derive"] }',
+                                 'zeroize = { version = "1.8", default-features = false, features = ["zeroize_derive"] }'),
+                                ("[lints]\nworkspace = true\n", ""), ("hex = { workspace = true }", 'hex = "0.4"')])
+open(f"{P}/sphincs-c10/Cargo.toml", "a").write("\n[workspace]\n")
+edit("sphincs-c10/tests/v2_kat.rs", [('{}/../research/c10-autoresearch/c10v2/', '{}/../../../c10v2/')])
+
+# ── 3. the host golden generator and the kit bench, pointed at the copy ──────────────────────────────────────
+edit("host_v2/Cargo.toml", [('path = "../../../sphincs-c10"', 'path = "../sphincs-c10"'),
+                            ('split810 = ["sphincs-c10/v2-split810"]', 'split810 = ["sphincs-c10/v2-split810"]\nw4l65 = ["sphincs-c10/v2-w4l65"]')])
+edit("host_v2/src/main.rs", [('include!("../../inputs.rs");', 'include!("../../../../inputs.rs");'),
+                             ('include!("../../diff_cases.rs");', 'include!("../../../../diff_cases.rs");'),
+                             ('m: &[u8; 32], sh: &[u8; 32]) -> [u8; 4008] {', 'm: &[u8; 32], sh: &[u8; 32]) -> [u8; sphincs_c10::params::SIGNATURE_LEN] {')])
+edit("bench_v2/Cargo.toml", [('path = "../../../sphincs-c10"', 'path = "../sphincs-c10"'), ('path = "../../../hw"', 'path = "../../../../../hw"'),
+                             ('hra-ldm = ["pqsigner-hw/hra-ldm"]', 'hra-ldm = ["pqsigner-hw/hra-ldm"]\nw4l65 = ["sphincs-c10/v2-w4l65"]')])
+edit("bench_v2/src/lib.rs", [('include!("../../inputs.rs");', 'include!("../../../../inputs.rs");')])
+
+# ── 4. the frozen runner / evaluator read 4,008-B signatures: parameterized copies ───────────────────────────
+edit("run_flash_sig.sh", [("read_memory \\$a 32 1002]", "read_memory \\$a 32 ${SIGW:-1002}]")])
+edit("evaluate_sig.py", [("log, golden = sys.argv[1], open(sys.argv[2], 'rb').read()\n",
+                          "log, golden = sys.argv[1], open(sys.argv[2], 'rb').read()\nSL = int(sys.argv[3]) if len(sys.argv) > 3 else 4008\n"),
+                         ("[])[:4008]\nb1", "[])[:SL]\nb1"), ("s1 or [])[:4008]", "s1 or [])[:SL]"),
+                         ("golden[16:16 + 4008]", "golden[16:16 + SL]"), ("golden[16 + 4008:]", "golden[16 + SL:]")])
+print("applied")
