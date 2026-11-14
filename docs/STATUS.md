@@ -1,5 +1,14 @@
 # PQSigner — STATUS (start here)
 
+**Corrected SHA-256 output serialization (2026-11-14):** the source-bound
+research profile checks actual finalization for every selected initial state,
+buffer, prior output, representable block count and output-byte index. The output
+equals the big-endian encoding of the actual final state; causal source controls
+and an unreachable-assertion control accompany the complete census. The
+[research owner](../contracts/verification/easycrypt/c10-port/RESEARCH-LIMITS.md#rust-correspondence)
+retains the history, wrapper, full Digest and compiler/model boundaries. CI
+checks archived evidence; it does not rerun the solver.
+
 **Corrected SHA-256 constructor component (2026-10-30):** the owner-selected
 research dependency passes symbolic U32/U64 zero-default and arbitrary
 64-byte generation/order checks, with targeted byte/order and initialization

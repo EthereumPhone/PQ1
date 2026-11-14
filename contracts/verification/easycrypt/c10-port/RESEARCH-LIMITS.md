@@ -1254,17 +1254,48 @@ correction. All default, initialization, validity and unwind guards remain.
 The 110 native and recursive-Miri cleanup cases, including every injected panic
 index at U0/U1/U8/U32/U64, are finite evidence; an omitted-prefix-drop mutation
 is rejected. They are not universal panic/unwind or arbitrary-closure proofs.
-Both actual corrected full-caller code-generation diagnostics hit their compiler
+Both original corrected full-caller code-generation diagnostics hit their compiler
 CPU bound without completing translation or running a solver. The new profile
 preserves their failures and the original large-control timeout honestly.
 Production dependencies, original-source #1067 and complete `Digest`
 correspondence remain unchanged/open. Issue #1097 tracks the corrected target.
 
+**Corrected-dependency final-state output component (2026-11-14).** The isolated
+[`sha256-output` profile](../../sha256-output/README.md) checks the actual
+`sha2 0.10.9` finalization method with a proof-only observer appended to the
+unchanged implementation. For every eight-word initial state, 64-byte buffer,
+32-byte prior output, buffer position below 64, block counter below `2^55` and
+byte index below 32, the resulting output byte equals the corresponding
+big-endian byte of the actual post-compression state. The block counter is
+preserved and the buffer is reset. This is a serialization relation, not an
+independent functional SHA digest specification or a history-to-counter theorem.
+
+All 2,324 static properties and the dynamic padding-loop unwind check complete;
+four covers after the assertions establish the stated boundary reachability.
+Actual little-endian and omitted-final-word mutations fail only the intended
+output assertion on their selected finite input, with complete censuses of
+2,324 and 2,330 properties. A false-assumption control makes the final assertions
+unreachable and is rejected by the positive semantic criterion. Stopped earlier
+attempts and the old parser's refusal remain archived without proof credit.
+
+These checks use the exact private compiler/model/backend composition accepted
+at the [C3/C4 milestone](https://github.com/EthereumPhone/PQ1/issues/1097#issuecomment-6874194946),
+with explicit MiniSat2 selection. That earlier milestone covers one fixed-empty
+actual corrected full-caller case and its control; it does not close unrestricted
+Digest inputs. The new profile archives source reconstruction, compilation,
+complete results and execution receipts. Its standing CI validates that recorded
+evidence, while the separate replay command reruns the archived prepared solver
+program without recompiling Rust. Compiler/model and alias/provenance soundness
+remain trust boundaries. Production dependencies and original-source #1067
+remain unchanged/open.
+
 **Remaining backend boundary.** The word, complete-block, bounded initialized
-streaming, corrected constructors and corrected-dependency padding results do not connect the existing
+streaming, corrected constructors, corrected-dependency padding and final-state
+output results do not connect the existing
 `sha256_bytes`/`sha256_parts` postulates to an entire Rust `Digest` execution.
 General Rust streaming updates, source-level accumulated-length/padding composition,
-dispatch, unsafe conversions, accelerated backends, and the STM32 driver
+`CtVariableCoreWrapper`/`CoreWrapper` composition, dispatch, unsafe conversions,
+accelerated backends, and the STM32 driver
 remain outside these proofs. Direct extraction of the pinned full API still
 encounters generic-array/trait translation errors. The experimental portable
 profile does not waive that failure or establish a general iterator backend.

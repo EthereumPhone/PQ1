@@ -1,0 +1,42 @@
+
+// Proof-only observer; all preceding upstream method bodies are unchanged.
+#[cfg(kani)]
+mod output_assembly_probe {
+    use super::*;
+
+    #[kani::proof]
+    #[kani::unwind(193)]
+    fn arbitrary_final_state_serialization() {
+        let initial_state: [u32; 8] = kani::any();
+        let initial_buffer: [u8; 64] = kani::any();
+        let initial_output: [u8; 32] = kani::any();
+        let position: usize = kani::any();
+        let block_count: u64 = kani::any();
+        let byte_index: usize = kani::any();
+        kani::assume(position < 64);
+        kani::assume(block_count < (1u64 << 55));
+        kani::assume(byte_index < 32);
+
+        let mut core = Sha256VarCore { state: initial_state, block_len: block_count };
+        let mut buffer = Buffer::<Sha256VarCore>::default();
+        buffer.set(initial_buffer.into(), position);
+        let mut output: Output<Sha256VarCore> = initial_output.into();
+
+        // Actual padding, compression, and serialization; no replacement core.
+        core.finalize_variable_core(&mut buffer, &mut output);
+
+        // Independent scalar byte-order oracle over the actual final state.
+        let word = core.state[byte_index / 4];
+        let shift = 24 - 8 * (byte_index % 4);
+        let expected_byte = ((word >> shift) & 0xff) as u8;
+        assert!(output[byte_index] == expected_byte, "output is final-state big-endian byte");
+        assert!(core.block_len == block_count, "finalization preserves input block counter");
+        assert!(buffer.get_pos() == 0, "finalization resets buffer position");
+
+        kani::cover!(position == 0, "empty buffered suffix reaches final output");
+        kani::cover!(position == 55, "last single-padding-block position reaches final output");
+        kani::cover!(position == 56, "first double-padding-block position reaches final output");
+        kani::cover!(position == 63 && byte_index == 31 && block_count == (1u64 << 55) - 1,
+                     "last output byte and last representable length reach final output");
+    }
+}

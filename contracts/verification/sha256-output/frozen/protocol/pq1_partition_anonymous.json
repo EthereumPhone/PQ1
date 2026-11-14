@@ -1,0 +1,176 @@
+{
+  "pointer_dereference.1": {
+    "class": "pointer dereference",
+    "description": "dereference failure: pointer NULL in self->block_len",
+    "expression": "!(__CPROVER_POINTER_OBJECT(((unsigned long int *)NULL)) == __CPROVER_POINTER_OBJECT(self))",
+    "name": "pointer_dereference.1",
+    "sourceLocation": {
+      "comment": "dereference failure: pointer NULL in self->block_len",
+      "pragma": [
+        "checked:bounds-check",
+        "checked:pointer-check",
+        "checked:div-by-zero-check",
+        "checked:nan-check",
+        "checked:memory-leak-check",
+        "checked:memory-cleanup-check",
+        "checked:float-div-by-zero-check",
+        "checked:enum-range-check",
+        "checked:signed-overflow-check",
+        "checked:unsigned-overflow-check",
+        "checked:pointer-overflow-check",
+        "checked:conversion-check",
+        "checked:undefined-shift-check",
+        "checked:float-overflow-check",
+        "checked:pointer-primitive-check"
+      ],
+      "propertyClass": "pointer dereference",
+      "propertyFatal": true,
+      "propertyId": "pointer_dereference.1"
+    }
+  },
+  "pointer_dereference.2": {
+    "class": "pointer dereference",
+    "description": "dereference failure: pointer invalid in self->block_len",
+    "expression": "!IS_INVALID_POINTER(self)",
+    "name": "pointer_dereference.2",
+    "sourceLocation": {
+      "comment": "dereference failure: pointer invalid in self->block_len",
+      "pragma": [
+        "checked:bounds-check",
+        "checked:pointer-check",
+        "checked:div-by-zero-check",
+        "checked:nan-check",
+        "checked:memory-leak-check",
+        "checked:memory-cleanup-check",
+        "checked:float-div-by-zero-check",
+        "checked:enum-range-check",
+        "checked:signed-overflow-check",
+        "checked:unsigned-overflow-check",
+        "checked:pointer-overflow-check",
+        "checked:conversion-check",
+        "checked:undefined-shift-check",
+        "checked:float-overflow-check",
+        "checked:pointer-primitive-check"
+      ],
+      "propertyClass": "pointer dereference",
+      "propertyFatal": true,
+      "propertyId": "pointer_dereference.2"
+    }
+  },
+  "pointer_dereference.3": {
+    "class": "pointer dereference",
+    "description": "dereference failure: deallocated dynamic object in self->block_len",
+    "expression": "!(__CPROVER_POINTER_OBJECT(self) == __CPROVER_POINTER_OBJECT(__CPROVER_deallocated))",
+    "name": "pointer_dereference.3",
+    "sourceLocation": {
+      "comment": "dereference failure: deallocated dynamic object in self->block_len",
+      "pragma": [
+        "checked:bounds-check",
+        "checked:pointer-check",
+        "checked:div-by-zero-check",
+        "checked:nan-check",
+        "checked:memory-leak-check",
+        "checked:memory-cleanup-check",
+        "checked:float-div-by-zero-check",
+        "checked:enum-range-check",
+        "checked:signed-overflow-check",
+        "checked:unsigned-overflow-check",
+        "checked:pointer-overflow-check",
+        "checked:conversion-check",
+        "checked:undefined-shift-check",
+        "checked:float-overflow-check",
+        "checked:pointer-primitive-check"
+      ],
+      "propertyClass": "pointer dereference",
+      "propertyFatal": true,
+      "propertyId": "pointer_dereference.3"
+    }
+  },
+  "pointer_dereference.4": {
+    "class": "pointer dereference",
+    "description": "dereference failure: dead object in self->block_len",
+    "expression": "!(__CPROVER_POINTER_OBJECT(self) == __CPROVER_POINTER_OBJECT(__CPROVER_dead_object))",
+    "name": "pointer_dereference.4",
+    "sourceLocation": {
+      "comment": "dereference failure: dead object in self->block_len",
+      "pragma": [
+        "checked:bounds-check",
+        "checked:pointer-check",
+        "checked:div-by-zero-check",
+        "checked:nan-check",
+        "checked:memory-leak-check",
+        "checked:memory-cleanup-check",
+        "checked:float-div-by-zero-check",
+        "checked:enum-range-check",
+        "checked:signed-overflow-check",
+        "checked:unsigned-overflow-check",
+        "checked:pointer-overflow-check",
+        "checked:conversion-check",
+        "checked:undefined-shift-check",
+        "checked:float-overflow-check",
+        "checked:pointer-primitive-check"
+      ],
+      "propertyClass": "pointer dereference",
+      "propertyFatal": true,
+      "propertyId": "pointer_dereference.4"
+    }
+  },
+  "pointer_dereference.5": {
+    "class": "pointer dereference",
+    "description": "dereference failure: pointer outside object bounds in self->block_len",
+    "expression": "(unsigned __CPROVER_bitvector[65])__CPROVER_OBJECT_SIZE(self) >= (unsigned __CPROVER_bitvector[65])(__CPROVER_POINTER_OFFSET(self) + 32ul) + 8",
+    "name": "pointer_dereference.5",
+    "sourceLocation": {
+      "comment": "dereference failure: pointer outside object bounds in self->block_len",
+      "pragma": [
+        "checked:bounds-check",
+        "checked:pointer-check",
+        "checked:div-by-zero-check",
+        "checked:nan-check",
+        "checked:memory-leak-check",
+        "checked:memory-cleanup-check",
+        "checked:float-div-by-zero-check",
+        "checked:enum-range-check",
+        "checked:signed-overflow-check",
+        "checked:unsigned-overflow-check",
+        "checked:pointer-overflow-check",
+        "checked:conversion-check",
+        "checked:undefined-shift-check",
+        "checked:float-overflow-check",
+        "checked:pointer-primitive-check"
+      ],
+      "propertyClass": "pointer dereference",
+      "propertyFatal": true,
+      "propertyId": "pointer_dereference.5"
+    }
+  },
+  "pointer_dereference.6": {
+    "class": "pointer dereference",
+    "description": "dereference failure: invalid integer address in self->block_len",
+    "expression": "!(__CPROVER_POINTER_OBJECT(((unsigned long int *)NULL)) == __CPROVER_POINTER_OBJECT(self)) || (char *)self + 32l == ((char *)NULL)",
+    "name": "pointer_dereference.6",
+    "sourceLocation": {
+      "comment": "dereference failure: invalid integer address in self->block_len",
+      "pragma": [
+        "checked:bounds-check",
+        "checked:pointer-check",
+        "checked:div-by-zero-check",
+        "checked:nan-check",
+        "checked:memory-leak-check",
+        "checked:memory-cleanup-check",
+        "checked:float-div-by-zero-check",
+        "checked:enum-range-check",
+        "checked:signed-overflow-check",
+        "checked:unsigned-overflow-check",
+        "checked:pointer-overflow-check",
+        "checked:conversion-check",
+        "checked:undefined-shift-check",
+        "checked:float-overflow-check",
+        "checked:pointer-primitive-check"
+      ],
+      "propertyClass": "pointer dereference",
+      "propertyFatal": true,
+      "propertyId": "pointer_dereference.6"
+    }
+  }
+}

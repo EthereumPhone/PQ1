@@ -1,0 +1,35 @@
+name: FV (recorded SHA-256 output evidence)
+
+on:
+  push:
+    branches: [master]
+    paths: &output_paths
+      - 'contracts/verification/sha256-output/**'
+      - 'contracts/verification/sha256-padding/frozen/crates/**'
+      - 'contracts/verification/sha256-padding/frozen/generic-array.patch'
+      - '.github/workflows/sha256-output-evidence.yml'
+  pull_request:
+    paths: *output_paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: output-evidence-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  recorded-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Check recorded evidence and rejection controls (no solver replay)
+        working-directory: contracts/verification/sha256-output
+        run: |
+          python3 -B check.py
+          python3 -B test_gate.py -v
+          python3 -B inputs.py "$RUNNER_TEMP/output-inputs" --case positive

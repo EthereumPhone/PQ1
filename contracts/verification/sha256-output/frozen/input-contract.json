@@ -1,0 +1,67 @@
+{
+  "format": 1,
+  "historical_root": "/home/nicola/.local/state/pqsigner-research/easycrypt-full-digest-20261028/corrected-digest/digest-output-assembly-v1",
+  "dependency_archives": {
+    "block-buffer-0.10.4": {
+      "path": "../sha256-padding/frozen/crates/block-buffer-0.10.4.crate",
+      "sha256": "3078c7629b62d3f0439517fa394996acacc5cbc91c5a20d8c658e77abd503a71"
+    },
+    "cfg-if-1.0.4": {
+      "path": "frozen/crates/cfg-if-1.0.4.crate",
+      "sha256": "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
+    },
+    "cpufeatures-0.2.17": {
+      "path": "frozen/crates/cpufeatures-0.2.17.crate",
+      "sha256": "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
+    },
+    "crypto-common-0.1.7": {
+      "path": "frozen/crates/crypto-common-0.1.7.crate",
+      "sha256": "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
+    },
+    "digest-0.10.7": {
+      "path": "frozen/crates/digest-0.10.7.crate",
+      "sha256": "9ed9a281f7bc9b7576e61468ba615a66a5c8cfdff42420a70aa82701a3b1e292"
+    },
+    "generic-array-0.14.7": {
+      "path": "../sha256-padding/frozen/crates/generic-array-0.14.7.crate",
+      "sha256": "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
+    },
+    "libc-0.2.185": {
+      "path": "frozen/crates/libc-0.2.185.crate",
+      "sha256": "52ff2c0fe9bc6cb6b14a0592c2ff4fa9ceb83eea9db979b0487cd054946a2b8f"
+    },
+    "sha2-0.10.9": {
+      "path": "frozen/crates/sha2-0.10.9.crate",
+      "sha256": "a7507d819769d01a365ab707794a4084392c824f54a7a6a7862f8c3d0892b283"
+    },
+    "typenum-1.20.1": {
+      "path": "../sha256-padding/frozen/crates/typenum-1.20.1.crate",
+      "sha256": "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
+    },
+    "version_check-0.9.5": {
+      "path": "../sha256-padding/frozen/crates/version_check-0.9.5.crate",
+      "sha256": "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+    }
+  },
+  "generic_array_patch": {
+    "path": "../sha256-padding/frozen/generic-array.patch",
+    "sha256": "58f09226434661ea5ee27f80979aa61390e1e83e76ddcb2fd0a368b057dec18d"
+  },
+  "generic_array_original_lib_sha256": "20b64b4359b0e82a3523fd536ad06de25e174cead734cffd3fa5f7c48f659247",
+  "generic_array_corrected_lib_sha256": "5d08f9d4395b7960b8dbad2c1d8e71f8b65eb67417947a65c0c6fa542cbd8e8d",
+  "upstream_core_api_sha256": "73b160d98bfa6737688875ad73da5e3c2c93582604dc313d208200e12fdab676",
+  "harness_sha256": "b263b3a57cb33910a59c69b2f7d37cbfc2bf1bd4f1303c3d14a71ae1cb2285f9",
+  "manifest_sha256": "0c37416749108abc62804126fcb60511276b84f2c764871564bdc7852f406f2e",
+  "lock_sha256": "a0712c16a7320690f53ebb5f606f59de52fb8ed5a7f3d068089ea9f1a919c117",
+  "case_source_sha256": {
+    "positive": "d39d8362ad63b0b2f596f297f9eef625bfed7bc528bcd2dd301e90326e75d29f",
+    "little-endian": "718050e636ba98fd4a0fa961ac999061b9d46125b43af6eb66a3d826c4b9bb4b",
+    "omitted-word": "6c38123cf45f0f7c99492e6fa3fb8a453078c7ffe1d04698f62c3b18690d5fd2",
+    "unreachable": "bdb004ec16a7c6fcb3d9d10de7797c5de47a14c10f1527db0018be7e8848bd58"
+  },
+  "harness": "core_api::output_assembly_probe::arbitrary_final_state_serialization",
+  "input_scope": "All 8-word initial states, 64 buffer bytes, 32 prior output bytes, positions 0..63, block counts below 2^55, and byte indices 0..31. These count/position bounds are exactly the representable SHA-256 bit-length range for this state shape.",
+  "source_scope": "Output equals big-endian serialization of the actual post-compression state; counter is preserved and buffer reset. Does not assume or assert the desired SHA compression value.",
+  "root_manifest_boundary": "Generated minimal root selects original sha2 Rust modules with force-soft/no-std. This is not an assertion that the complete upstream package manifest was built.",
+  "status": "Input reconstruction material only; all controls, evidence gate and combined review must finish before publication."
+}
