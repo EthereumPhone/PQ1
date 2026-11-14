@@ -4718,6 +4718,9 @@ duress-probe-e2e = ["dual-se", "optiga-hw-counter"]
 # without auth, serves a shielded read after auth, refuses a plaintext read
 # even after auth. Production-fenced (nsc/mod.rs + PROD_FORBIDDEN).
 optiga-ac-probe = ["dual-se"]
+# DVT 6A.13 (#122 / SE14): does every HMAC authorisation shape advance the
+# LUC counter? Spare objects F1D5 / F1D7 / E122 only. Bench-only, terminal.
+optiga-luc-probe = ["optiga-ac-probe", "optiga-hw-counter"]
 # §32 PRODUCTION duress (decoy) wallet. Provisions a second, fully
 # independent decoy wallet behind a second PIN credential (OPTIGA F1D8 +
 # E121 matched-LUC, SE050 DURESS_USERID_OBJ unlimited). When ON, the
