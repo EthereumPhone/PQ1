@@ -87,4 +87,17 @@ import SphincsCVerify.Interpreter.C10Refine
 import SphincsCVerify.Interpreter.YulParse
 import SphincsCVerify.Interpreter.C10Source
 import SphincsCVerify.Interpreter.C10Parse
+import SphincsCVerify.Interpreter.C10HeadSource
+import SphincsCVerify.Interpreter.C10HeadProgram
+import SphincsCVerify.Interpreter.C10HeadParse
+import SphincsCVerify.Interpreter.RelE1
+import SphincsCVerify.Interpreter.RelChain
+import SphincsCVerify.Interpreter.RelChainControls
+import SphincsCVerify.Interpreter.RelWots
+import SphincsCVerify.Interpreter.RelMerkle
+import SphincsCVerify.Interpreter.RelWotsEntry
+import SphincsCVerify.Interpreter.RelSkeleton
+import SphincsCVerify.Interpreter.RelMid
+import SphincsCVerify.Interpreter.RelHmsg
+import SphincsCVerify.Interpreter.RelFors
 import SphincsCVerify.Platform.MemoryMap

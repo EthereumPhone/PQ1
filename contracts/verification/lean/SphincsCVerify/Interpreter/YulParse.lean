@@ -14,17 +14,23 @@ so the reviewed TCB element becomes THIS parser (a total, computable,
 fuel-based function) instead of the Python script + its runtime. The Python
 checker stays as the CI mirror (CI has no Lean toolchain).
 
-## Mapping rules (mirroring the Python reference checker exactly)
+## Mapping rules (the Python checker `check_c10_transcription_ast.py` mirrors the pre-extension rules only)
 
   * `pop(staticcall(gas(), 0x02, inOff, inLen, outOff, 32))` → `.sha256 inOff inLen outOff`
     — FAILS (`none`) unless the target is the literal `0x02` and the out-len the
-    literal `32` (asserted at token level: the pinned source has literals there).
+    literal `32` (asserted at token level: the pinned source has literals there), or, the
+    batch-6 extension, the literal `16` (→ `.sha256h`, the first 16 digest bytes).
   * `return(off, 0x20)` → `.ret off` — FAILS if the length expr ≠ `.lit 0x20`.
   * `revert(a, b)` → `.revert` (both argument exprs parsed, then dropped —
     a halt-revert's arguments cannot affect the Bool verdict).
   * canonical `for { let v := 0 } lt(v, COUNT) { v := add(v, 1) } { BODY }`
     → `.forRange v COUNT BODY` — FAILS on ANY non-canonical shape (init not
-    `let v := 0`, cond not `lt(v, …)`, post not `v := add(v, 1)`).
+    `let v := 0`, cond not `lt(v, …)`, post not `v := add(v, 1)`). Batch-6 extension: an
+    init `let v := E` with a NON-literal `E`, a literal count `< 2^256` and a body that does
+    not assign `v` → `.forFrom v E COUNT BODY`; a literal init other than `0` still FAILS.
+  * Batch-6 extension: `byte(i, x)` → `.bin .byte`; `mstore8(a, b)` → `.mstore8`;
+    `calldatacopy(a, b, c)` → `.calldatacopy` (the two statement forms only when the name is
+    followed by `(`, so an assignment to a variable of that name parses as before).
   * `if COND { BODY }` → `.ifnz COND BODY`; standalone `{ … }` → `.block`;
     `let x := E` → `.letv x E`; `x := E` → `.setv x E` (NO return-var
     normalization — the faithful parse of `valid := …` is `.setv`).
@@ -216,6 +222,12 @@ def expAssign : List Tok → Option (List Tok)
 def expNum (k : Nat) : List Tok → Option (List Tok)
   | .num n :: r => if n = k then some r else none
   | _ => none
+/-- Whether the next token is `(` (batch-6 extension: the new statement forms `mstore8(…)` /
+    `calldatacopy(…)` are taken only then, so `mstore8 := e` still parses as the assignment it
+    was before the extension). -/
+def nextIsLParen : List Tok → Bool
+  | .lparen :: _ => true
+  | _ => false
 /-- Expect exactly the identifier `s` (`staticcall` / `gas` / `lt` / `add`). -/
 def expIdent (s : String) : List Tok → Option (List Tok)
   | .ident t :: r => if t == s then some r else none
@@ -236,6 +248,7 @@ def binOpOf (s : String) : Option BinOp :=
   else if s == "shr" then some .shr
   else if s == "eq" then some .eq
   else if s == "lt" then some .lt
+  else if s == "byte" then some .byte      -- batch-6 extension
   else none
 
 /-- Fuel-based expression parser. `fuel` bounds nesting depth. An identifier
@@ -275,6 +288,29 @@ def parseExpr : Nat → List Tok → Option (Expr × List Tok)
         else some (.var s, rest)
     | _ => none
 
+/-! ## Loop-variable assignment check (batch-6 extension)
+
+`.forFrom` fixes its iteration count at entry; that is faithful to Yul's re-evaluated
+`lt(v, count)` only if the body never assigns `v` (and the count is a literal, checked at the
+parse site). `assignsIn fuel v body` is that check. -/
+
+/-- Fuel-based (structural on the fuel, so it kernel-reduces inside `rfl` parse proofs; the
+    nested `Stmt`/`List Stmt` recursion would be well-founded-compiled). Out of fuel answers
+    `true`, i.e. the parse is REJECTED. -/
+def assignsIn : Nat → String → List Stmt → Bool
+  | 0, _, _ => true
+  | _ + 1, _, [] => false
+  | f + 1, v, s :: rest =>
+      (match s with
+       | .letv x _ => x == v
+       | .setv x _ => x == v
+       | .ifnz _ body => assignsIn f v body
+       | .forRange u _ body => u == v || assignsIn f v body
+       | .block body => assignsIn f v body
+       | .forFrom u _ _ body => u == v || assignsIn f v body
+       | _ => false)
+      || assignsIn f v rest
+
 /-! ## Statement parser -/
 
 /-- Fuel-based statement-list parser. Parses statements up to (WITHOUT
@@ -312,10 +348,13 @@ def parseStmtList : Nat → List Tok → Option (List Stmt × List Tok)
           -- canonical `for { let v := 0 } lt(v, COUNT) { v := add(v, 1) } { BODY }`
           let r1 ← expLBrace rest
           let r2 ← expIdent "let" r1
+          -- batch-6 extension: the init expression is parsed; a literal 0 gives the canonical
+          -- `.forRange` exactly as before, any other literal is still rejected, and a computed
+          -- start with a LITERAL count gives `.forFrom`
           match r2 with
           | .ident v :: r3 => do
               let r4 ← expAssign r3
-              let r5 ← expNum 0 r4
+              let (start, r5) ← parseExpr fuel r4
               let r6 ← expRBrace r5
               let r7 ← expIdent "lt" r6
               let r8 ← expLParen r7
@@ -337,7 +376,15 @@ def parseStmtList : Nat → List Tok → Option (List Stmt × List Tok)
               let (body, r24) ← parseStmtList fuel r23
               let r25 ← expRBrace r24
               let (stmts, r26) ← parseStmtList fuel r25
-              pure (.forRange v count body :: stmts, r26)
+              match start, count with
+              | .lit 0, _ => pure (.forRange v count body :: stmts, r26)
+              | .lit _, _ => none
+              | _, .lit k =>
+                  -- the count is a literal WORD (Yul rejects larger literals) and the body must
+                  -- not assign the loop variable
+                  if k < W && !assignsIn fuel v body then pure (.forFrom v start (.lit k) body :: stmts, r26)
+                  else none
+              | _, _ => none
           | _ => none
         else if s == "pop" then do
           -- `pop(staticcall(gas(), 0x02, inOff, inLen, outOff, 32))` → `.sha256`
@@ -356,11 +403,19 @@ def parseStmtList : Nat → List Tok → Option (List Stmt × List Tok)
           let r13 ← expComma r12
           let (outOff, r14) ← parseExpr fuel r13
           let r15 ← expComma r14
-          let r16 ← expNum 32 r15        -- out-len MUST be the literal 32
-          let r17 ← expRParen r16        -- close staticcall(
-          let r18 ← expRParen r17        -- close pop(
-          let (stmts, r19) ← parseStmtList fuel r18
-          pure (.sha256 inOff inLen outOff :: stmts, r19)
+          -- out-len MUST be the literal 32 (`.sha256`) or, batch-6 extension, 16 (`.sha256h`)
+          match r15 with
+          | .num 32 :: r16 => do
+              let r17 ← expRParen r16        -- close staticcall(
+              let r18 ← expRParen r17        -- close pop(
+              let (stmts, r19) ← parseStmtList fuel r18
+              pure (.sha256 inOff inLen outOff :: stmts, r19)
+          | .num 16 :: r16 => do
+              let r17 ← expRParen r16
+              let r18 ← expRParen r17
+              let (stmts, r19) ← parseStmtList fuel r18
+              pure (.sha256h inOff inLen outOff :: stmts, r19)
+          | _ => none
         else if s == "mstore" then do    -- `mstore(a, b)`
           let r1 ← expLParen rest
           let (a, r2) ← parseExpr fuel r1
@@ -369,6 +424,24 @@ def parseStmtList : Nat → List Tok → Option (List Stmt × List Tok)
           let r5 ← expRParen r4
           let (stmts, r6) ← parseStmtList fuel r5
           pure (.mstore a b :: stmts, r6)
+        else if s == "mstore8" && nextIsLParen rest then do   -- batch-6 extension: `mstore8(a, b)`
+          let r1 ← expLParen rest
+          let (a, r2) ← parseExpr fuel r1
+          let r3 ← expComma r2
+          let (b, r4) ← parseExpr fuel r3
+          let r5 ← expRParen r4
+          let (stmts, r6) ← parseStmtList fuel r5
+          pure (.mstore8 a b :: stmts, r6)
+        else if s == "calldatacopy" && nextIsLParen rest then do  -- batch-6: `calldatacopy(a, b, c)`
+          let r1 ← expLParen rest
+          let (a, r2) ← parseExpr fuel r1
+          let r3 ← expComma r2
+          let (b, r4) ← parseExpr fuel r3
+          let r5 ← expComma r4
+          let (c, r6) ← parseExpr fuel r5
+          let r7 ← expRParen r6
+          let (stmts, r8) ← parseStmtList fuel r7
+          pure (.calldatacopy a b c :: stmts, r8)
         else if s == "revert" then do    -- `revert(a, b)` → `.revert` (args dropped)
           let r1 ← expLParen rest
           let (_, r2) ← parseExpr fuel r1
@@ -414,6 +487,19 @@ def parseYul (src : String) : Option (List Stmt) := do
   match rest with
   | [] => some stmts
   | _ => none                            -- trailing tokens (e.g. a stray `}`)
+
+/-- `parseYul` with an explicit fuel (batch-6 extension). The optimized v1 source
+    (`C10HeadSource.lean`, ~32 kB) needs more tokenizer fuel than `parseFuel`;
+    `parseYul` itself is unchanged and is this function at `parseFuel`
+    (`parseYul_eq_parseYulFuel`, by `rfl`). -/
+def parseYulFuel (fuel : Nat) (src : String) : Option (List Stmt) := do
+  let toks ← tokenize fuel src.toList []
+  let (stmts, rest) ← parseStmtList fuel toks
+  match rest with
+  | [] => some stmts
+  | _ => none
+
+theorem parseYul_eq_parseYulFuel (src : String) : parseYul src = parseYulFuel parseFuel src := rfl
 
 /-! ## Smoke tests (`#guard` = compile-time; all tstack-safe small fragments)
 
@@ -475,5 +561,36 @@ toolchain), so the guards pattern-match the expected tree instead of `=`. -/
 -- unbalanced / trailing tokens fail
 #guard (parseYul "let x := ").isNone
 #guard (parseYul "let x := 1 }").isNone
+
+-- batch-6 extension smoke tests
+#guard (match parseYul "let b := byte(3, slots)" with
+        | some [.letv "b" (.bin .byte (.lit 3) (.var "slots"))] => true | _ => false)
+#guard (match parseYul "mstore8(0x37, 12)" with
+        | some [.mstore8 (.lit 55) (.lit 12)] => true | _ => false)
+#guard (match parseYul "calldatacopy(byte(0, slots), add(authPtr, 0), 16)" with
+        | some [.calldatacopy (.bin .byte (.lit 0) (.var "slots"))
+                  (.bin .add (.var "authPtr") (.lit 0)) (.lit 16)] => true | _ => false)
+#guard (match parseYul "pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 16))" with
+        | some [.sha256h (.lit 0) (.lit 96) (.lit 64)] => true | _ => false)
+#guard (parseYul "pop(staticcall(gas(), 0x02, 0x00, 0x60, 0x40, 8))").isNone
+#guard (match parseYul "for { let p := and(shr(3, d), 7) } lt(p, 7) { p := add(p, 1) } { mstore8(0x3B, p) }" with
+        | some [.forFrom "p" (.bin .band (.bin .shr (.lit 3) (.var "d")) (.lit 7)) (.lit 7)
+                  [.mstore8 (.lit 59) (.var "p")]] => true | _ => false)
+-- a computed start needs a literal count; a literal non-zero start is still rejected (above)
+#guard (parseYul "for { let p := and(d, 7) } lt(p, n) { p := add(p, 1) } { x := p }").isNone
+-- and a body that assigns the loop variable is rejected
+#guard (parseYul "for { let p := and(d, 7) } lt(p, 7) { p := add(p, 1) } { p := 9 }").isNone
+-- and a count that is not a word is rejected (2^256 and above)
+#guard (parseYul "for { let p := and(d, 7) } lt(p, 0x10000000000000000000000000000000000000000000000000000000000000000) { p := add(p, 1) } { mstore8(0x3B, p) }").isNone
+#guard (match parseYul "for { let p := and(d, 7) } lt(p, 0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff) { p := add(p, 1) } { mstore8(0x3B, p) }" with
+        | some [.forFrom "p" _ (.lit _) _] => true | _ => false)
+-- REGRESSION (Astra batch 6, P2-1): `mstore8` / `calldatacopy` not followed by `(` parse exactly
+-- as before the extension, as plain assignments to variables of those names
+#guard (match parseYul "mstore8 := 1" with
+        | some [.setv "mstore8" (.lit 1)] => true | _ => false)
+#guard (match parseYul "calldatacopy := 1" with
+        | some [.setv "calldatacopy" (.lit 1)] => true | _ => false)
+#guard (match parseYul "let x := byte" with
+        | some [.letv "x" (.var "byte")] => true | _ => false)
 
 end SphincsCVerify.Interpreter.YulParse

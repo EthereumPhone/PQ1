@@ -56,6 +56,7 @@ def calldataload {n : Nat} (sig : Spec.ByteVec n) (off : Nat) : Nat :=
 
 /-- Binary operators modelled by the interpreter. -/
 inductive BinOp | add | sub | mul | band | bor | bxor | shl | shr | eq | lt
+  | byte  -- batch-6 extension (appended): Yul `byte(i, x)`, the i-th big-endian byte of x
 deriving Repr, DecidableEq
 
 /-- Yul expressions. `sigOffset` models the `sig.offset` calldata base (= 0). -/
@@ -83,6 +84,25 @@ inductive Stmt
   | block (body : List Stmt)                -- a `{ ... }` scope (flat env; no shadowing in this Yul)
   | revert                                  -- `revert(...)` → halt-revert
   | ret (off : Expr)                        -- `return(off, 0x20)` → halt-return the 32-byte word at off
+  -- ── batch-6 extension for the optimized v1 verifier (APPENDED: every constructor above and
+  --    its semantics are unchanged; see the "Extension" section below) ──
+  | mstore8 (off val : Expr)                -- `mstore8(off, val)`: the byte `val mod 256` at off
+  | calldatacopy (dst src len : Expr)       -- `calldatacopy(dst, src, len)`, zero past the blob
+  | sha256h (inOff inLen outOff : Expr)
+      -- `pop(staticcall(gas(), 0x02, inOff, inLen, outOff, 16))`: the FIRST 16 digest bytes
+  | forFrom (v : String) (start count : Expr) (body : List Stmt)
+      -- `for { let v := start } lt(v, count) { v := add(v,1) } { body }`; start and count are
+      -- evaluated ONCE at entry, and the body runs with v = start, …, count-1 (none if
+      -- start ≥ count), until a halt. This corresponds to the Yul loop under the forRange
+      -- convention, on these PREMISES: word-valued inputs and literals, in particular
+      -- `eval sig vm start < 2^256` (the interpreter does not reduce every expression mod 2^256:
+      -- literals, variables, `sig.length` and some bitwise results are returned as they are; the
+      -- parser enforces only the literal count < 2^256; the target's starts `and(…, 7)` are
+      -- bounded); the body does not assign v (checked by the parser); v is loop-local (lexical
+      -- scope correct in the source); and states are compared on OBSERVABLE state only: like
+      -- `forRange`, the driver does not replay the initializer or the final post-increment on v
+      -- (start 7, count 7 leaves v's old binding; start 5, count 7 leaves v = 6), which is
+      -- unobservable once v is out of scope.
 deriving Repr
 
 /-! ## Interpreter state -/
@@ -130,6 +150,25 @@ def eval {n : Nat} (sig : Spec.ByteVec n) (vm : VM) : Expr → Nat
       | .shr  => y >>> x                    -- Yul shr(x,y) = y >> x : a=shift, b=value
       | .eq   => if x = y then 1 else 0
       | .lt   => if x < y then 1 else 0
+      | .byte => if x < 32 then (y >>> (8 * (31 - x))) % 256 else 0  -- EVM BYTE (i = x)
+
+/-! ## Extension helpers (batch 6: byte-granular writes)
+
+`writeBytes` generalizes `writeRegion` (32 bytes) to any length; `mstore8Mem` writes one byte;
+`calldataByte` is the blob byte at `i`, zero past the end (consistent with `calldataload`, whose
+`loadWord32` zero-pads the same way). Used ONLY by the appended statement forms. -/
+
+/-- Write `len` bytes `f 0 .. f (len-1)` at `off`. -/
+def writeBytes (mem : ByteMemory) (off len : Nat) (f : Nat → UInt8) : ByteMemory :=
+  fun a => if off ≤ a ∧ a < off + len then f (a - off) else mem a
+
+/-- EVM `mstore8(off, val)`: the byte `val mod 256` at `off`. -/
+def mstore8Mem (mem : ByteMemory) (off val : Nat) : ByteMemory :=
+  fun a => if a = off then UInt8.ofNat (val % 256) else mem a
+
+/-- The calldata (signature blob) byte at `i`; `0` past the end. -/
+def calldataByte {n : Nat} (sig : Spec.ByteVec n) (i : Nat) : UInt8 :=
+  sig.data.getD i 0
 
 /-! ## Statement execution
 
@@ -157,6 +196,20 @@ mutual
     | .block body, vm => execList sha sig body vm
     | .revert, vm => (vm, some Halt.reverted)
     | .ret off, vm => (vm, some (Halt.returned (mload32 vm.mem (eval sig vm off))))
+    -- batch-6 extension
+    | .mstore8 off val, vm =>
+        ({ vm with mem := mstore8Mem vm.mem (eval sig vm off) (eval sig vm val) }, none)
+    | .calldatacopy dst src len, vm =>
+        let s := eval sig vm src
+        ({ vm with mem := writeBytes vm.mem (eval sig vm dst) (eval sig vm len)
+                            (fun i => calldataByte sig (s + i)) }, none)
+    | .sha256h inOff inLen outOff, vm =>
+        let dig := sha (slice vm.mem (eval sig vm inOff) (eval sig vm inLen))
+        ({ vm with mem := writeBytes vm.mem (eval sig vm outOff) 16 (fun i => dig.data.getD i 0) },
+         none)
+    | .forFrom v start count body, vm =>
+        let s := eval sig vm start
+        execFor sha sig v body (eval sig vm count - s) s vm
 
   /-- Execute a list of statements with short-circuit on the first halt. -/
   def execList {n : Nat} (sha : List UInt8 → Spec.ByteVec 32) (sig : Spec.ByteVec n) :

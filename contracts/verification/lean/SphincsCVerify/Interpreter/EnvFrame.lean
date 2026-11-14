@@ -28,6 +28,11 @@ def assignsVar : Stmt → String → Bool
   | .sha256 _ _ _,      _ => false
   | .revert,            _ => false
   | .ret _,             _ => false
+  -- batch-6 extension
+  | .mstore8 _ _,       _ => false
+  | .calldatacopy _ _ _, _ => false
+  | .sha256h _ _ _,     _ => false
+  | .forFrom v _ _ body, x => (v == x) || assignsVarList body x
 def assignsVarList : List Stmt → String → Bool
   | [],        _ => false
   | s :: rest, x => assignsVar s x || assignsVarList rest x
@@ -62,6 +67,16 @@ theorem execStmt_env_frame {n : Nat} (sha : List UInt8 → Spec.ByteVec 32) (sig
   | block body =>
     simp only [execStmt]
     exact execList_env_frame sha sig body x vm (by rw [assignsVar] at h; exact h)
+  -- batch-6 extension: the three writes touch memory only; forFrom is forRange's case
+  | mstore8 o val => simp only [execStmt]
+  | calldatacopy a b c => simp only [execStmt]
+  | sha256h a b c => simp only [execStmt]
+  | forFrom v st cnt body =>
+    have hvx : v ≠ x := fun he => by rw [assignsVar, he] at h; simp at h
+    have hbody : assignsVarList body x = false := by
+      rw [assignsVar] at h; exact (Bool.or_eq_false_iff.mp h).2
+    simp only [execStmt]
+    exact execFor_env_frame sha sig v body x hvx hbody _ _ vm
 theorem execList_env_frame {n : Nat} (sha : List UInt8 → Spec.ByteVec 32) (sig : Spec.ByteVec n)
     (stmts : List Stmt) (x : String) (vm : VM) (h : assignsVarList stmts x = false) :
     (execList sha sig stmts vm).1.env x = vm.env x := by
