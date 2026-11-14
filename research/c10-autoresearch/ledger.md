@@ -2000,3 +2000,41 @@ Astra: **NO-GO against the strict a–e gate.** It reran the script: 500 samples
   - (c) fault margin +0.34 b, DPA as v2.
   - **(d): it derives the same `sk_seed`, and its WOTS PRF A7 for ci < 43 equals 0.3's**, so it shares WOTS secrets with 0.3 unless a format identifier is bound into both derivation branches.
   - The WOTS one-time term is w^l = 2^128 against stock's 2^129, which the EasyCrypt encoding term carries.
+
+### 2b. Astra's review of the search and w4, and the fixes (amends §2 and §3; the rows above are kept as first reported)
+
+Astra (search + w4): **"FIX reporting; conditional MODEL-PASS for w4, not adoption approval."** The anchor passed exactly (5 cap pairs, 108 term comparisons). The generalized terms are faithful extrapolations, **not EasyCrypt theorems**: d ≠ 2 and w ≠ 8 need proof ports (coverage and extraction across layers; chain vectors, digit distribution, acceptance and extraction for w), and shuffle expansion above 65 items is an extra implementation assumption. The EasyCrypt ratios compare advantage-bound right-hand sides at qr = qs = 2^16 and mostly reflect fewer charged signer queries; they are not security-level ratios.
+
+**Corrections to §2 / §3 [computed, `format_options_numerics.py search` at `39c5c34e7`]:**
+- **The w4 (c) delta was misreported.** The committed gzip carried +0.627 b (w4 kept its 800-sample estimate while stock had 4,000), and §2's table said +0.34, which matches neither. At 4,000 samples for both: **+0.439 b, SE 0.076.**
+- **Fix 1, consistent sampling:** every (w, l, T) on a reported frontier now gets the 4,000-sample estimate, and the sweep repeats until no frontier row is coarse. 226 triples are refined: 85 near a mark boundary plus 141 from the frontier closure, converging after one re-sweep. The TSV carries `c_samples` and `c_median_se_bits` per row. A (c) delta within about 2 SE of 0 is not an established ordering.
+- **Fix 2, the one-time digest term is marked on its own:** `enc` = log2(w^l), the per-query probability that one H_MSG output hits a given digit vector. Stock has 129; w4 has 128 (2^-129 → 2^-128). The total encoding term already contained it, but the mark rule did not penalize it separately.
+- **New marks:** PASS 20,334, MINOR-LOSS 17,206, FAIL 2,294,189 (was 21,830 / 15,710 / unchanged). Stock is still on the PASS frontier, and no PASS set weakly dominates it.
+
+**w4 (l = 64) is now MINOR-LOSS at exactly 1.000 bit, driven by `enc`.** Every other metric is no worse. Its strict-PASS neighbour, **w4l65**, costs almost the same:
+
+| set (strict marks) | cached M (brief / share) | sig B | verify gas | enc Δ | (c) Δ b (samples, SE) | EC ord ratio | mark | A7 |
+|---|---:|---:|---:|---:|---:|---:|---|---|
+| stock / v2 0.3 | 102.6 / 100.9 | 4,008 | 164,704 | 0 | 0 (4000, 0.075) | 1 | PASS | as-is |
+| **w4l65: h18 d2 a11 k13 w4 l65 T125** | **75.7 / 72.3 (−26% / −28%)** | 4,712 (+704) | 161,826 (−1.7%) | **+1** | **+0.70 (4000, 0.076)** | 0.659 | **PASS** | ci 7 bits |
+| w4l65 at T124 | 75.4 / 72.0 | 4,712 | 162,380 | +1 | +0.13 (4000, 0.089) | 0.659 | PASS, not robust | ci 7 bits |
+| w4: h18 d2 a11 k13 w4 l64 T124 | 75.3 / 71.9 | 4,680 | 160,182 | −1 | +0.44 (4000, 0.076) | 0.651 | MINOR-LOSS 1.00 [enc] | as-is |
+| h18 d2 a10 k16 w8 l43 T205 | 95.6 / 93.9 | 4,344 | 175,910 | 0 | 0 | 0.622 | PASS | as-is |
+| h18 d2 a10 k16 w8 l46 T209 | 89.6 / 86.2 | 4,440 | 186,889 | +9 | +0.12 | 0.667 | PASS | as-is |
+| h16 d2 a11 k18 w8 l43 T205 | 75.2 / 73.5 | 4,936 | 195,644 | 0 | 0 | 0.218 | PASS | as-is |
+| h18 d3 a11 k13 w8 l46 T209 | 39.7 / 36.3 | 4,844 | 219,635 | +9 | +0.12 (was −0.04 at 800) | 0.325 | PASS (was MINOR) | re-layout |
+| h20 d4 a8 k18 w8 l47 T211 | 20.7 / 17.2 | 5,824 | 276,087 | +12 | +0.18 | 0.156 | PASS | re-layout |
+| h18 d3 a8 k24 w4 l65 T124 | 20.3 / 16.6 | 6,764 | 233,322 | +1 | +0.13 | 0.035 | PASS | re-layout |
+
+All cycle and gas figures come from the model calibrated at one point (stock); none is measured. The d ≥ 3 and w = 4 rows carry the extrapolation caveats above.
+
+**Why T125 and not T124 for w4l65.** T124 is 0.3 M cycles cheaper. Its (c) delta of +0.13 b is within 2 SE, so its PASS on (c) is not established. T125's +0.70 b is about 9 SE clear.
+
+**w4l65 in the Python reference (`b4d46ed10`, `c10v2_ref.py --variant w4l65`):**
+- **Format:** w = 4, l = 65, T = 125; digits from the low 130 bits of WOTS_DIGEST; 4,712 B.
+- **Address:** A7 ci widens to 7 bits at 23..17 (into the free bits 17–16), with every other field unchanged. `_check_layout` asserts the fields are disjoint.
+- **Checks:** the self-test (8 bit-flips, wrong root and message, 3 +C near-misses) and the cross-format checks pass. Each format's signature is rejected by the other's verifier.
+- **KATs:** 6 KATs and 3 near-misses (`kat-v2-w4l65.*`, `c10v2_kat_vectors_w4l65.json`). The KAT vectors of draft 0.3, w4, ts200, prf2, split810 and all3 regenerate identically.
+- **Not done:** Rust and kit timing, for the same reasons as §3.
+
+**(d) applies to w4l65 as well [computed].** With identical seeds, w4l65's WOTS PRF output for ci = 0 equals draft 0.3's and w4's, because ci = 0 packs identically; for ci ≥ 1 it differs. FORS secrets and the R-candidate PRF are shared with every v2 variant. Gate (d) must therefore bind the complete parameter and encoding variant into both derivation branches before any w4-family key signs. Astra's review of these two commits follows in §2c.
