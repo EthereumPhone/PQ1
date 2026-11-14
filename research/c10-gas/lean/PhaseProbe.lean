@@ -12,7 +12,9 @@ phase still reaches its exit predicate.
 
 Two oracles: `mixSha` (input-sensitive in the digest bytes node values keep; digit sum 205 in the
 low bytes; zero keys) and the real `c10Oracle` on KAT vector `valid-1` (a valid signature, so
-the reference verdict is `true`). Run from contracts/verification/lean:
+the reference verdict is `true`). Run from contracts/verification/lean; `SphincsCVerify.KatVectors`
+is not in the default `lake build` target, so build it first:
+  lake build SphincsCVerify.KatVectors
   lake env lean ../../../research/c10-gas/lean/PhaseProbe.lean
 -/
 import SphincsCVerify.Interpreter.RelSkeleton
