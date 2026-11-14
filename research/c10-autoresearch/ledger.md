@@ -1857,3 +1857,56 @@ This is a code change for a later round, with the owner's go.
 - a per-sign table: confirm→`film_start`, `film_start`→sign start, `pre_sign` wait, draws (per fill, per source), sign A, sign B, the verifies, commit, `t_ready`, the film wait, and the host total;
 - the fallback rate;
 - whether 0.3 s still holds.
+
+## Round 16 (2026-11-14): format changes as candidates — v2 0.3 dossier, family search, split810
+
+**Owner, 2026-11-14:** format changes may enter the final code if security is no weaker than stock C10 (v1: h=18 d=2 a=11 k=13 w=8 l=43 T=205, 4,008 B). A later refinement makes gate (S) a **reporting device**: each item is marked PASS, MINOR-LOSS or FAIL with its numbers, and the owner decides minor losses. SHA-256 stays.
+
+Labels: **[computed]** = a script printed it (named); **[argued]** = reasoning; **[reviewed]** = Astra.
+
+### 1. Dossier: v2 draft 0.3 (#1155, the one-block format) against stock C10
+
+Computed items: `c10v2/dossier_v2_03.py`. It imports `bound_variants.py` (and runs its anchor) and `format_options_numerics.py`.
+
+**(a) The proven bound: equal numbers, proof not yet ported. Mark: PASS on the numbers, NOT YET PROVEN for v2.**
+- **Quantitative.lean floor**, min(k·a, n − qBits, n − 2·qBits), equal [computed]: slot cap 2^16 gives 96 bits for both; the P14 bootstrap across C chains gives 94 b at C = 2 and 88 b at C = 16 for both. The Grover convention (half of each) gives 48, 47 and 44. That convention is not a QROM theorem.
+- **EasyCrypt-shape bound**, equal [computed]: v2 0.3 changes no constant (`consts()` is equal; the script asserts it).
+  - qr = qs = 2^16: ordinary 2^-60.80, wrapper 2^-59.80.
+  - Bootstrap C = 2: 2^-59.80 and 2^-58.80; C = 16: 2^-56.80 and 2^-55.78.
+- **Not proven:** the EasyCrypt theorems are proved for v1's byte format (32-byte seed blocks, 32-byte ADRS, v1's FORS_LAST tweak sharing). For v2 the equal row is "if the proof ports with the same charge structure". The port means re-checking the byte-layout-dependent refined exclusions (`LeafGrindingCandidates.ec`, `NodeQueryDomain.ec`) against the A7 one-block encoding, plus v2's dedicated FORS_LAST type 9, which removes v1's tweak sharing. Until then (a) is a computation, not a theorem.
+
+**(b) Hash assumption: the same assumption. Mark: PASS [argued].**
+- **The model:** both formats are the "simple" SHA-256 tweakable hash, modelled as a random oracle (classical) or quantum random oracle (Hülsing–Kudinov, ePrint 2022/346). The project's EasyCrypt proof is an ideal-oracle byte game over SHA-256 in either format, so v2 adds no assumption.
+- **What it needs instead is an injective encoding of logical inputs:**
+  - A7 injectivity [computed, `format_options_checks.py` A];
+  - v2 input lengths disjoint from v1's, except the shared R-grind PRF, which is the same function [spec §3, listed];
+  - the 39-byte KDF inputs separated by a fixed 7-byte ASCII prefix against hash outputs, plus secret keying [argued, spec §3].
+- **H_MSG with R last** relies on SHA-256 collision resistance in M. M is already an unrandomized SHA-256 digest of the signed object, so this is no new assumption [argued].
+- **Outside the random-oracle model** the constructions differ: v1's first compression block is seed ‖ ADRS, v2 makes one compression from the fixed IV. The project analyses neither in the standard model.
+
+**(c) Fault fallback and SCA margins. Mark: MINOR-LOSS (DPA exposure), with a costed fix.**
+- **Fault fallback: equal [computed].** One WOTS key signing two sum-205 digests leaves a median per-try forgery of 2^-55.21 (1st percentile 2^-47.27). That depends on (l, w, T) only. The FI chain (double compute, compare, verify-before-release, shuffle, sentinels) is the same code [argued].
+- **DPA exposure: higher [computed count, argued impact].** Per signing pass, these are the single compressions that take `sk_seed` together with attacker-known varying words:
+
+  | | FORS PRF | WOTS PRF | total |
+  |---|---:|---:|---:|
+  | v1 | 24,576 (one 48-B block) | 0 | 24,576 |
+  | v2 0.3 | 24,576 | 44,032 | 68,608 (×2.79, about 1.5 bits) |
+
+  v1's WOTS PRF is 80 B. Its `sk_seed` block, `sk_seed ‖ "wots" ‖ layer ‖ 0^24`, is constant per layer; the varying fields meet only a per-layer secret chaining value in block 2. v2's WOTS PRF is one block, `sk_seed ‖ A7`.
+
+  So an attacker gets the same `sk_seed` trace budget from about 2.8× fewer signing passes. This is an exposure count, not a measured DPA margin.
+- **Fix [argued, cost estimated]:** keep the WOTS secret PRF in v1's two-block shape, with `sk_seed` in a block that is constant per layer. The PRF is signer-side key derivation; the verifier never computes it. It costs +44,032 compressions per pass, about +4 M cycles (≈ +8% of 50.35 M), and restores v1's exposure. FORS is unchanged: v1's FORS PRF is already one block.
+- **HR residue:** both formats compute 32-byte PRF digests and use 16 bytes, so there is no change [argued].
+
+**(d) Format identifier in key derivation. Mark: FAIL as implemented, with a simple fix.**
+- v2 derives `(sk_seed, pk_seed)` with v1's tags (`domain/src/lib.rs`); nothing binds a format.
+- Between v1 and v2 the preimages are length-disjoint, so their chains and secrets are independent under the PRF assumption [argued]. Between v2 *variants* they are not (format-options-security §4: 2^53–2^77).
+- **Fix (proposal, not implemented):** under the v2 feature only, derive the v2 master with a format-bound tag (e.g. `"sphincs-c10v2-0.3"` / `"...-acct"`) so that any later v2 variant needs a new tag. Account-0 stock tags stay untouched in default builds. This means a new address per format, which invariant #6 accepts only if the format is fixed before the first v2 key signs.
+
+**(e) Review and reproducibility.** Every number above comes from `dossier_v2_03.py`, `bound_variants.py`, `format_options_numerics.py` and `format_options_checks.py`. Astra review: pending (next entry).
+
+**Dossier bottom line:**
+- **Not yet airtight.** (a) is equal in numbers but not proven for v2's byte format, (c) has a ~1.5-bit DPA exposure increase, and (d) is missing.
+- The (c) and (d) fixes are small and specified: two-block WOTS PRF (about +8% sign), and a format-bound KDF tag.
+- (a) needs the EasyCrypt byte-model port. That is the real remaining cost of adopting v2.
