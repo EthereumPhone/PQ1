@@ -110,7 +110,7 @@ description = "Exact public digest and full key of the authentication-path proof
 condition = "AND"
 paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
 regexTarget = "line"
-regexes = ['''^\s*"contracts/verification/scripts/test_fors_auth_proof_controls\.py": "(2b2380a9baf8bd6bf5f863f0220d10ca5df28d269518c8d6c299d6f5c3c95ed5|368fb691e422e2e57d558f16c8e18e463888e4d4bb2a9c775e840848668ce850)",?\s*$''']
+regexes = ['''^\s*"contracts/verification/scripts/test_fors_auth_proof_controls\.py": "(2b2380a9baf8bd6bf5f863f0220d10ca5df28d269518c8d6c299d6f5c3c95ed5|368fb691e422e2e57d558f16c8e18e463888e4d4bb2a9c775e840848668ce850|03345f4d34c136a3833a55daa0e90a8c4c6d4a41fbda391c1c64cbe32761fb7d)",?\s*$''']
 
 [[rules.allowlists]]
 description = "Exact public source digest of the node-domain keygen scope probe"
@@ -378,8 +378,8 @@ condition = "AND"
 paths = ['''^contracts/verification/easycrypt/c10-port/cert-source-binding\.json$''']
 regexTarget = "line"
 regexes = [
-  '''^\s*"contracts/verification/extracted/Extracted/ForsAuthOutside\.lean": "d21e77b0ebe9f52fa70d27a2efcec1e64313e02e152783b254d2cce593331ac8",?\s*$''',
-  '''^\s*"contracts/verification/extracted/Extracted/XmssAuthOutside\.lean": "f43183acf09d0e3fcc07478684839d42468af8bc96397e3675a38cdd5d47c0b8",?\s*$''',
+  '''^\s*"contracts/verification/extracted/Extracted/ForsAuthOutside\.lean": "(d21e77b0ebe9f52fa70d27a2efcec1e64313e02e152783b254d2cce593331ac8|37420f3be5db79b084f2c2354448015ffb580759af2de3a170a51390d0427ace)",?\s*$''',
+  '''^\s*"contracts/verification/extracted/Extracted/XmssAuthOutside\.lean": "(f43183acf09d0e3fcc07478684839d42468af8bc96397e3675a38cdd5d47c0b8|01b2277a60fb156c2a1c4320bec2aa0b494ea24050437059338d3b08573a90f8)",?\s*$''',
 ]
 
 [[rules.allowlists]]
