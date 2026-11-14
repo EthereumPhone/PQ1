@@ -2402,7 +2402,7 @@ Astra (`dc80e9fb6`; all 24 generated files match an in-memory replay of `apply.p
 
 ## Round 18 (2026-11-14): the two candidates, like for like
 
-Labels: **[m]** measured on kit 0055002D at 160 MHz (flash-only; option bytes read back after every session, identical to the baseline); **[c]** computed by a committed script; **[e]** estimated (judgement or an extrapolation). Every kit run is in `proto_w4l65/kit-runs-2026-11-14-r18.jsonl`. All builds come from the `proto_w4l65` recipe (`apply.py` sections 8–10). The 13 round-17 ELFs rebuild byte-identically: the new asm is appended at the end of `hash.rs`, so no other build's panic locations move.
+Labels: **[m]** measured on kit 0055002D at 160 MHz (flash-only; option bytes read back after every session, identical to the baseline); **[c]** computed by a committed script or from measured components; **[e]** estimated (judgement or an extrapolation); **[h]** host analysis (binsec). Every kit run is in `proto_w4l65/kit-runs-2026-11-14-r18.jsonl`. All builds come from the `proto_w4l65` recipe (`apply.py` sections 8–10). The 13 round-17 ELFs rebuild byte-identically: the new asm is appended at the end of `hash.rs`, so no other build's panic locations move.
 
 ### 1. wprf2b inside the dt32 asm key loop (v2 0.3)
 
@@ -2411,7 +2411,7 @@ The 8 constant words (`"C10v2-WOTS-PRF2B"`, the layer from bit 27 of the byte-re
 **Results [m]:**
 - **Fixed messages:** signatures byte-identical to `golden-v2-wprf2b.bin`.
 - **Keygen:** 16.93 → 19.17 M (0.106 → 0.120 s), **+102 cycles per extra block** (the Rust loop gave 98).
-- **16-message means:** sign 50.345 → 55.545 M per pass (+10.3%); cached 100.81 → 111.21 M (**0.630 → 0.695 s**). The keys change, so the grind luck does too, and the per-pass figure is luck-confounded. The luck-free figure is +44,118 blocks × 102 ≈ **+4.5 M per pass (+8.9%)** [c].
+- **16-message means:** sign 50.345 → 55.545 M per pass (+10.3%); cached 100.81 → 111.21 M (**0.630 → 0.695 s**). The keys change, so the grind luck does too, and the per-pass figure is luck-confounded. Applying keygen's 102 cycles per block to signing gives +44,118 blocks × 102 ≈ **+4.5 M per pass (≈ +8.9%)** [e]: an extrapolation, and the denominator still carries grind luck.
 - **FI chain (product-shaped `bench_chain` copy):** **0.725 s**, keygen 0.121 s.
 
 ### 2. w4l65 at full speed, and w4l65 + wprf2b
@@ -2438,7 +2438,7 @@ The 8 constant words (`"C10v2-WOTS-PRF2B"`, the layer from bit 27 of the byte-re
 | FI double compute [m] | **PASS:** 16/16 released; sign A and sign B 57.85 M each, `ct_eq`, verify 0.12 M before release | **PASS:** 16/16; 45.08 M each, verify 0.13 M | `bench_chain` copy (the mirror of `crypto::c10_sign_verified_with_progress_inner`) on the fused copies |
 | FI positive controls [m] | sign B corrupted: **0/16** released (stops at the compare); both corrupted alike: **0/16** (compare passes, the verify gate refuses) | same, 0/16 and 0/16 | features `fi-control-cmp`, `fi-control-verify` |
 | residue gate [m] | **PASS:** 9 cases clean (mask 0); control build 11 cases, mask **0x600** (exactly the two positive controls) | **PASS**, same | `bench_v2drv` copy; patterns from the candidate's own PRF (two-block), l (65), ci layout (7 bits at 17) and chain length (3). The new asm paths covered: the wprf2b key loop (cases 0 and 1), T_65 inside `wots_pk16` (case 1), the wprf2b `prf_chain16` feed (case 2). The w4 search handles public data only. |
-| timing gate [m] | **PASS:** `driver_fors` 700/700 CF, 3,533/3,533 memory; `driver_th` 712/712, 3,659/3,659; new `driver_wprf` (two-block `wots_secret`) 1,026/1,026, 5,933/5,933; shuffle control INSECURE by design | **PASS**, identical counts (the control differs by one check: SHUFFLE_CAP 65) | `cargo-checkct` on a copy of `tools/sca/checkct` against the sphincs copy |
+| timing gate [h] | **PASS:** `driver_fors` 700/700 CF, 3,533/3,533 memory; `driver_th` 712/712, 3,659/3,659; new `driver_wprf` (two-block `wots_secret`) 1,026/1,026, 5,933/5,933; shuffle control INSECURE by design | **PASS**, identical counts (the control differs by one check: SHUFFLE_CAP 65) | `cargo-checkct` on a copy of `tools/sca/checkct` against the sphincs copy |
 
 **What could not run on a copy, and why:**
 - **The product FI function itself** (`secure/src/crypto.rs`) is not built against the copies; the evidence comes from its mirror in `bench_chain`. That is the round-13 arrangement.
@@ -2452,8 +2452,8 @@ The 8 constant words (`"C10v2-WOTS-PRF2B"`, the layer from bit 27 of the byte-re
 
 | | **v1 (shipping)** | **v2 0.3 + wprf2b + fmtKDF** | **w4l65 + wprf2b + fmtKDF** |
 |---|---|---|---|
-| cached sign, FI chain (product-shaped) | **3.03 s** shipping driver (484.6 M, round 13) [m]; 1.145 s research driver (183.2 M) [m] | **0.725 s** (115.99 M) [m] | **0.566 s** (90.48 M) [m] |
-| cached sign, 16-message est. (research bench) | 1.126 s (v1 research driver, 180.1 M) [m] | 0.695 s [m] (luck-free ≈ 0.687 s [c]) | 0.533 s [m] |
+| cached sign, FI chain (product-shaped `bench_chain`, no UI tick) | **2.92 s** shipping driver, no tick (467.3 M; 3.03 s with the per-digest tick stub) [m, round 13]; 1.145 s research driver, no tick (183.2 M) [m, round 13] | **0.725 s** (115.99 M) [m] | **0.566 s** (90.48 M) [m] |
+| cached sign, 16-message est. (research bench, 2 × mean sign + mean verify) | 1.126 s (v1 research driver, 180.1 M) [c] | 0.695 s [c] (≈ 0.687 s if signing costs 102 cycles per block [e]) | 0.533 s [c] |
 | keygen | 0.485 s shipping (77.6 M, round 13) [m]; 0.195 s research driver [m] | 0.120 s [m] | 0.102 s [m] |
 | verify, cycles on the kit | 179,257 (research driver) [m]; 0.21–0.24 M in the product chain (round 13) [m] | 119,800 [m] | 130,619 [m] |
 | signature bytes | 4,008 | 4,008 | 4,712 (+704) |
@@ -2461,19 +2461,37 @@ The 8 constant words (`"C10v2-WOTS-PRF2B"`, the layer from bit 27 of the byte-re
 | (a) quantum | GAP (no QROM statement) | GAP | GAP |
 | (b) hash assumption | PASS (baseline) | conditional PASS (whole-hash RO; the 39-B FORS-PRF / KDF overlap and the H_MSG inner collision remain noted) [reviewed r16] | conditional PASS, same |
 | (c) fault fallback | baseline 2^-55.21 [c] | equal [c] | **+0.70 ± 0.11 b** [c] |
-| (c) DPA exposure vs v1 (`sk_seed` counter) | 26,636 | **26,624, ×0.9995** [c]; asm-key-loop cost +8.9% [c] / +10.3% [m, luck] | **26,624, ×0.9995** [c] |
-| (c) chaining-value residual (uncounted) | 44,118 | 44,118 (×1.000) [c] | 66,690 (**×1.512**, MINOR-LOSS ~0.6 b) [c] |
+| (c) DPA exposure vs v1 (`sk_seed` counter) | 26,636 | **26,624, ×0.9995** [c]; its asm-key-loop cost: keygen +102 cycles per block [m], sign +10.3% per pass [m, grind luck], ≈ +8.9% [e] | **26,624, ×0.9995** [c] |
+| (c) chaining-value residual (uncounted) | 44,118 | 44,118 (×1.000) [c] | 66,690 (**×1.512**) [c]: an exposure count; its security effect is UNKNOWN |
 | (c) physical SCA | UNKNOWN | UNKNOWN (GAP) | UNKNOWN (GAP) |
 | (d) format id in the KDF | n/a (stock) | **PASS in the copy:** fmtKDF, Astra "no binding or label defect"; 11 tests × 9 builds, 13 plants, 3 controls | **PASS in the copy**, same |
 | (e) review / reproducibility | PASS (machine-checked proof) | PARTIAL: numerics reproduced, Astra-reviewed, no proof replay, no physical validation | PARTIAL, same |
-| assurance gates on the copy (FI, residue, timing) | product gates | PASS / PASS / PASS [m] (§3) | PASS / PASS / PASS [m] (§3) |
+| assurance gates on the copy (FI mirror, residue, timing) | product gates | PASS [m] / PASS [m] / PASS [h] (§3, limits in §5) | PASS [m] / PASS [m] / PASS [h] (§3, limits in §5) |
 | FV landing: re-extract / re-prove / re-pin [e] | none | `sphincs-c10` (`hash.rs`, `lib.rs`, `v2hash.rs`, `Cargo.toml`) + `domain/src/lib.rs`, plus the secure/tool consumers of the stock tags; order of the round-17 re-pin (`207139703`) | everything in the middle column plus `params.rs`, `wots.rs`, `shuffle.rs` (pinned whole-file) |
 | FV landing: EasyCrypt [e] | none | v2 byte-format port of the refined exclusions (dossier (a)): ~1–3 person-months (judgement) | the same, plus a parameter generalization (w = 4, l = 65, T = 125: 266 + 95 files carry literals; chain-vector, digit, acceptance and extraction proofs): **+2–6 person-months** (judgement) |
 | FV landing: quantum note [e] | 0.5–2 person-months paper, 6–18+ machine-checked (shared by all three) | same | same |
 | on-chain gas, per-UserOp cost (Track B) | | | |
 
 **How to read it:**
-- **Speed:** both candidates beat the shipping v1 by 4–5× in cached sign, and the v1 research driver by 1.6× / 2.0×.
+- **Speed:** like for like (same product-shaped FI bench, no UI tick, bench substitutes for the SE randomness and UI, fixed seeds rather than fmtKDF-derived keys), the candidates are **1.6× / 2.0×** faster than v1 on the research driver. Against the shipping v1 driver (no tick) they are 4.0× / 5.2× faster; that ratio mixes the format change with the driver change. Neither ratio is product latency.
 - **w4l65 + wprf2b over v2 0.3 + wprf2b:** 22% faster on the FI chain (0.566 against 0.725 s). The price is 704 more signature bytes, a 1.5× larger uncounted chaining-value DPA residual, and a heavier EasyCrypt port.
-- **v2 0.3 + wprf2b** keeps v1's parameters and signature size; its only open proof work is the byte-format port.
+- **v2 0.3 + wprf2b** keeps v1's parameters and signature size. Its open proof work is the byte-format port, plus the new PRF (wprf2b) and fmtKDF correspondence, and the joint-security items stated in round 17 (§§3, 5).
 - **Neither candidate** has a proven classical bound, a quantum statement or physical SCA evidence. The decision is the owner's.
+
+### 5. Astra's review of round 18 (`2e009449f`), folded into §§1–4
+
+Astra: **"FIX the claims and evidence presentation; no new assembly correctness blocker found."** What it confirmed:
+- **The asm:** the 8 DIN words, the layer from bit 27, and the register lifetimes at both PRF sites are right. Word 17 triggers the compression and word 18 is expected backpressure. PRF NBLW is 24.
+- **T_65:** it feeds exactly words 0–265: 16 full blocks plus a 40-byte tail, 17 padded blocks, NBLW 0.
+- **The search:** its context matches dt32, and the digit-sum bounds are 6 → 12 → 48 → 192, at most 195. The saved golden logs and 200,000 random digit sums recheck.
+
+Corrected above:
+1. **The chaining-value residual (×1.512)** is an exposure count. Its "MINOR-LOSS ~0.6 b" label had no leakage-to-recovery model behind it, so it is now UNKNOWN.
+2. **Configuration axes are disclosed.** The shipping comparison now uses the no-tick product chain (2.92 s). The research cached times are [c] (2 × mean sign + mean verify), checkct is [h], and the +8.9% is [e]; "luck-free" is gone.
+3. **"Only the byte-format port" was too broad.** The wprf2b and fmtKDF correspondence and the joint-security gaps stay open.
+
+**Limits of the assurance results:**
+- **Residue coverage is sampled.** Intermediate chain values are scanned for chains 0–7 only, and the single-chain cases run 6 steps. The residue builds use driver opt-level 3 on Cortex-M33, while the FI builds use "z" and a generic target, so cleanliness does not automatically transfer.
+- **The FI controls** show that the mirror's compare and verify-before-release are live. They do not show production fault resistance, relocking or failure-path wiping, which the mirror lacks.
+- **`bench_chain` timing on rejected runs is bogus:** `T_LAST` is written only on success, so the 776–991 M "release_copy" figures in the control rows are artefacts. The 0/16-released results stand.
+- **`driver_wprf`** reaches the 71-byte implementation with `sk_seed` secret; the solver counts were not independently replayed.
