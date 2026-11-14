@@ -483,6 +483,13 @@ fn derive_c10_slot_seeds(slot_entropy: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
     return slot_seeds_with_format(&compiled_format_id(), slot_entropy);
     // sk_seed = sha256("slot_c10_sk_seed"[16] ‖ slot_entropy[32]) — 48 bytes."""),
 ])
+# the legacy "c7" routes (retired in production, RETIRED_LEGACY_VK) mint C10 keys from format-unbound tags:
+# under format-kdf they do not exist (mk.sh's probe proves every caller then fails to compile)
+for name in ("slhdsa_seed_from_bip39", "derive_signing_key_from_entropy", "derive_keypair_from_entropy",
+             "bootstrap_seed_from_bip39", "derive_bootstrap_key_from_entropy", "derive_bootstrap_keypair_from_entropy",
+             "derive_bootstrap_vk_from_entropy"):
+    edit("domain/src/lib.rs", [(f"#[must_use]\npub fn {name}(",
+                                f"#[cfg(not(feature = \"format-kdf\"))]\n#[must_use]\npub fn {name}(")])
 open(f"{P}/domain/src/lib.rs", "a").write('''
 // ---------------------------------------------------------------------------
 // RESEARCH PROTOTYPE (round 17, gate (d); research/c10-autoresearch/proto_w4l65 section 7): the C10 format

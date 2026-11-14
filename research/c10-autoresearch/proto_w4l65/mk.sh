@@ -30,6 +30,27 @@ for ctl in "v2:must bind its format" "format-kdf:binds v2 formats only"; do
   echo "$out" | grep -q "${ctl#*:}" || { echo "CONTROL FAILED for the wrong reason: ${ctl%%:*}"; echo "$out" | tail -5; exit 1; }
   echo "control ok: --features ${ctl%%:*} refused (${ctl#*:})"
 done
+# the legacy c7 routes are gone under format-kdf: a probe calling all seven must fail to compile on each name
+cat > "$P/domain/tests/legacy_probe.rs" <<'RS'
+#![allow(unused)]
+use pqsigner_domain as d;
+fn probe(e: &[u8; 32], s: &[u8; 64]) {
+    let _ = d::slhdsa_seed_from_bip39(s);
+    let _ = d::derive_signing_key_from_entropy(e);
+    let _ = d::derive_keypair_from_entropy(e);
+    let _ = d::bootstrap_seed_from_bip39(s);
+    let _ = d::derive_bootstrap_key_from_entropy(e);
+    let _ = d::derive_bootstrap_keypair_from_entropy(e);
+    let _ = d::derive_bootstrap_vk_from_entropy(e);
+}
+RS
+( cd "$P/domain" && CARGO_TARGET_DIR=../tgt-dom cargo check --offline -q --tests --test legacy_probe ) || { echo "legacy probe: stock build does not compile"; exit 1; }
+if out=$(cd "$P/domain" && CARGO_TARGET_DIR=../tgt-dom cargo check --offline -q --features format-kdf,v2 --tests --test legacy_probe 2>&1); then
+  echo "CONTROL FAILED: the legacy c7 routes exist under format-kdf"; exit 1; fi
+n=$(echo "$out" | grep -c "cannot find function")
+[ "$n" -eq 7 ] || { echo "CONTROL FAILED: $n of 7 legacy routes refused"; echo "$out" | tail -8; exit 1; }
+echo "control ok: all 7 legacy c7 routes absent under format-kdf (stock build compiles them)"
+rm -f "$P/domain/tests/legacy_probe.rs"
 python3 "$D/proto_w4l65/plants_d.py" "$P"
 # exact SHA-256 digest counts (software hooks) and the kit golden
 ( cd "$P/host_v2" && CARGO_TARGET_DIR=../tgt cargo build --offline --release -q && CARGO_TARGET_DIR=../tgt-w4 cargo build --offline --release -q --features w4l65 )
