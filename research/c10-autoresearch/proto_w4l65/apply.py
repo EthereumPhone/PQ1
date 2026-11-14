@@ -143,6 +143,7 @@ edit("sphincs-c10/src/lib.rs", [('''#[cfg(all(feature = "near-miss-gen", feature
                                  '''#[cfg(all(feature = "v2-w4l65", any(feature = "near-miss-gen", feature = "v2-fused", feature = "v2-prf2")))]
 compile_error!("the `v2-w4l65` prototype is generic-path only (the fused driver is specialised to l = 43, w = 8)");
 #[cfg(all(feature = "near-miss-gen", feature = "v2-split810"))]''')])
+edit("sphincs-c10/src/lib.rs", [(") -> (u32, [u8; 32], [u8; 43]) {", ") -> (u32, [u8; 32], [u8; crate::params::L]) {")])   # sim_internals::find_count
 edit("sphincs-c10/tests/v2_kat.rs", [('''fn tag() -> &'static str {
     match''', '''fn tag() -> &'static str {
     if cfg!(feature = "v2-w4l65") {
