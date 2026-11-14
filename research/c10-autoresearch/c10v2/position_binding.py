@@ -11,14 +11,17 @@ upstream SPHINCs- B-01. This file is written from scratch for c10v2_ref.py.)
 
 Checks, per variant:
   F  two HONEST signatures at different hypertree positions that open the same FORS (tree t,
-     leaf j) reveal DIFFERENT secrets; each revealed secret equals fors_prf at its own position.
+     leaf j) reveal DIFFERENT secrets; each revealed secret equals fors_prf at its own position;
+     within each of those positions, distinct (tree, leaf) give distinct secrets (incl. j ^ 1).
   W  the WOTS analogue: the same chain index ci at a different (layer, tree, kp) gives a different
      secret (a grid, plus each single-field change), at the two honest signatures' own positions
-     too; and every revealed WOTS value is chain^digit(wots_prf(position, ci)), i.e. the signer
+     too; all L chain secrets are distinct within a position; and every revealed WOTS value is chain^digit(wots_prf(position, ci)), i.e. the signer
      uses this position-bound PRF.
   M  planted mutants that drop a position field from the PRF input (FORS ht_idx; WOTS layer,
-     tree, kp; and, for the two-block PRFs, the whole A7 tail) MUST make F or W fail, while the
-     mutant's signatures still verify (the upstream observation: only this test sees it).
+     tree, kp; for the two-block PRFs, tree and kp out of the A7 tail) or the pair low bit (prf2
+     hashes index & ~1 and only its half select restores the bit: the mutant hashes and selects with
+     the bit cleared, so 2j and 2j + 1 share a secret) MUST make F or W fail, while the mutant's
+     signatures still verify (the upstream observation: only this test sees it).
 
 Usage: position_binding.py [variant-name ...]   (default: all six). Exit 0 iff every honest check
 passes and every mutant is caught.
@@ -96,6 +99,17 @@ def check_fors(sk, ps, root, pr, sigs):
         raise Fail("F: the pair is at one position (search bug)")
     if s[0] == s[1]:
         raise Fail(f"F: FORS (t={t}, j={j}) secret SHARED across ht {pr['ht1']:#x} / {pr['ht2']:#x}")
+    # within one position: distinct (tree, leaf) give distinct secrets, including the prf2 pair partner j ^ 1
+    # (prf2 hashes leaf & ~1; only the half select restores the low bit)
+    leaves = sorted({0, 1, 2, 3, r.FORS_LEAVES - 2, r.FORS_LEAVES - 1, j, j ^ 1})
+    for ht in (pr["ht1"], pr["ht2"]):
+        seen = {}
+        for t2 in sorted({0, t, r.K - 2, r.K - 1}):
+            for leaf in leaves:
+                v = r.fors_prf(sk, ht, t2, leaf)
+                if v in seen:
+                    raise Fail(f"F: FORS secrets of {seen[v]} and {(t2, leaf)} COLLIDE within ht {ht:#x}")
+                seen[v] = (t2, leaf)
 
 
 def check_wots_signature(sk, ps, root, m, sig):
@@ -153,6 +167,14 @@ def check_wots_function(sk, honest_positions):
         for field, alt in ((0, (0, 0x2A5, 1)), (1, (1, 0, 1)), (2, (1, 0x2A5, 0))):
             if r.wots_prf(sk, *base, ci) == r.wots_prf(sk, *alt, ci):
                 raise Fail(f"W: wots_prf ci={ci} ignores field {('layer', 'tree', 'kp')[field]}")
+    # within one position: all L chain secrets distinct (covers every prf2 pair 2j / 2j + 1)
+    for p in ((0, 0, 0), (1, 0x2A5, 1)) + tuple(x for pp in honest_positions for x in pp):
+        seen = {}
+        for ci in range(r.L):
+            v = r.wots_prf(sk, *p, ci)
+            if v in seen:
+                raise Fail(f"W: wots_prf chains {seen[v]} and {ci} COLLIDE within position {p}")
+            seen[v] = ci
     # at the honest signatures' own positions (layer by layer)
     (pa, pb) = honest_positions
     for (la, ta, ka), (lb, tb, kb) in zip(pa, pb):
@@ -208,8 +230,16 @@ def mutants():
             return r.sha256(sk + blk + r.a7(r.WOTS_PRF, layer, 0, 0, ci))[:r.N]
         r.wots_prf = w
 
+    def fors_pairbit():
+        r.fors_prf = lambda sk, ht, t, leaf: ORIG["fors_prf"](sk, ht, t, leaf & ~1)
+
+    def wots_pairbit():
+        r.wots_prf = lambda sk, layer, tree, kp, ci: ORIG["wots_prf"](sk, layer, tree, kp, ci & ~1)
+
     return {
         "fors-drop-ht": (drop_ht, lambda v: True),
+        "fors-drop-pair-bit": (fors_pairbit, lambda v: True),
+        "wots-drop-pair-bit": (wots_pairbit, lambda v: True),
         "wots-drop-layer": (drop("layer"), lambda v: True),
         "wots-drop-tree": (drop("tree"), lambda v: True),
         "wots-drop-kp": (drop("kp"), lambda v: True),

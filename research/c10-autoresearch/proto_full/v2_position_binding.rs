@@ -107,6 +107,21 @@ fn fors_binding_two_honest_signatures() {
     assert_eq!(a, fors_secret(&sk, p.ht1, p.t as u32, p.j), "SETUP: revealed secret is not fors_secret at ht1");
     assert_eq!(b, fors_secret(&sk, p.ht2, p.t as u32, p.j), "SETUP: revealed secret is not fors_secret at ht2");
     assert_ne!(a, b, "F FAILED: FORS (t={}, j={}) secret SHARED across ht {:#x} / {:#x}", p.t, p.j, p.ht1, p.ht2);
+    // within one position: distinct (tree, leaf) give distinct secrets, including the prf2 pair partner j ^ 1
+    let leaves = [0u32, 1, 2, 3, 2046, 2047, p.j, p.j ^ 1];
+    for ht in [p.ht1, p.ht2] {
+        let mut seen: HashMap<[u8; N], (u32, u32)> = HashMap::new();
+        for t2 in [0u32, p.t as u32, K as u32 - 2, K as u32 - 1] {
+            for leaf in leaves {
+                let v = fors_secret(&sk, ht, t2, leaf);
+                if let Some(prev) = seen.insert(v, (t2, leaf)) {
+                    if prev != (t2, leaf) {
+                        panic!("F FAILED: FORS secrets of {prev:?} and {:?} COLLIDE within ht {ht:#x}", (t2, leaf));
+                    }
+                }
+            }
+        }
+    }
     println!("F holds");
 }
 
@@ -135,6 +150,18 @@ fn wots_binding_grid_and_honest_positions() {
         assert_ne!(base, wots_secret(&sk, 0, 0x2a5, 1, ci), "W FAILED: wots_secret ci={ci} ignores layer");
         assert_ne!(base, wots_secret(&sk, 1, 0, 1, ci), "W FAILED: wots_secret ci={ci} ignores tree");
         assert_ne!(base, wots_secret(&sk, 1, 0x2a5, 0, ci), "W FAILED: wots_secret ci={ci} ignores kp");
+    }
+    // within one position: all L chain secrets distinct (every prf2 pair 2j / 2j + 1, and chain 42)
+    let mut own: Vec<(u32, u64, u32)> = vec![(0, 0, 0), (1, 0x2a5, 1)];
+    own.extend(positions(p.ht1));
+    own.extend(positions(p.ht2));
+    for (layer, tree, kp) in own {
+        let mut seen: HashMap<[u8; N], u32> = HashMap::new();
+        for ci in 0..L as u32 {
+            if let Some(prev) = seen.insert(wots_secret(&sk, layer, tree, kp, ci), ci) {
+                panic!("W FAILED: wots_secret chains {prev} and {ci} COLLIDE within position {:?}", (layer, tree, kp));
+            }
+        }
     }
     for (pa, pb) in positions(p.ht1).iter().zip(positions(p.ht2).iter()) {
         if (pa.1, pa.2) == (pb.1, pb.2) {

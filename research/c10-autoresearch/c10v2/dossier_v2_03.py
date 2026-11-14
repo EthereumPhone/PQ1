@@ -142,6 +142,15 @@ def main():
         print(f"  {label}: sk_seed counter cold {c['sk_cold']:,} (x{c['sk_cold']/v1_total:.3f} vs v1), warm {c['sk_warm']:,}"
               f" (x{c['sk_warm']/v1_total:.3f}); CV residual cold {c['cv_cold']:,} (x{c['cv_cold']/cv_v1:.3f} of v1's"
               f" {cv_v1:,}), warm {c['cv_warm']:,} (x{c['cv_warm']/cv_v1:.3f})")
+    # round 20, keygen (not in the per-pass counter, for v1 either): "cold" above = no top cache, i.e. a pass that
+    # rebuilds the 1,024-leaf top tree. keygen_with_top_cache builds the top tree twice: once through the paired
+    # key loop (22 PRF digests per key) and once, as the confirm build, with rotated chain order through the
+    # per-chain PRF (43 per key). v1 keygen builds its 512-leaf top tree once (43 per key).
+    pairs = (p["l"] + 1) // 2
+    kg = 2**10 * pairs + 2**10 * p["l"]
+    kg_v1 = 2**hp * p["l"]
+    print(f"  keygen with the top cache: full stack sk_seed counter 0, CV {kg:,}; bridge sk_seed counter {kg:,}, CV 0"
+          f" (v1 keygen: sk_seed 0, CV {kg_v1:,}); once per key derivation, not per signature")
     # round 18 (UPDATE 2026-11-14): w4l65 + wprf2b — the WOTS PRF adds no sk_seed compression with varying words;
     # FORS is w4l65's (same k, a); the per-layer CV residual scales with l
     w4_cv_nc = 2 * (2**hp * 65 + 65)
