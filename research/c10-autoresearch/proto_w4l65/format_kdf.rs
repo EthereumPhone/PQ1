@@ -4,10 +4,13 @@
 #![cfg(feature = "format-kdf")]
 use hmac::{Hmac, Mac};
 use pqsigner_domain::{
-    bootstrap_master_with_format, compiled_format_id, derive_c10_master_from_bip39_seed, derive_c10_slot_keypair,
-    format_descriptor, format_id, slot_entropy, slot_master_entropy_from_bip39, slot_master_with_format,
-    slot_seeds_with_format, FormatParams, COMPILED_FORMAT, FORMAT_DESCRIPTOR_LEN,
+    bootstrap_master_with_format, compiled_format_id, derive_c10_master_from_bip39_seed, derive_c10_master_from_entropy,
+    derive_c10_master_keypair_from_entropy, derive_c10_slot_keypair, format_descriptor, format_id, slot_entropy,
+    slot_master_entropy_from_bip39, slot_master_entropy_from_entropy, slot_master_with_format, slot_seeds_with_format,
+    FormatParams, COMPILED_FORMAT, FORMAT_DESCRIPTOR_LEN,
 };
+use sphincs_c10::SigningKey;
+use sphincs_tz_bip39::Mnemonic;
 use sha2::{Digest, Sha256, Sha512};
 use std::collections::HashSet;
 
@@ -262,11 +265,38 @@ fn public_slot_keypair_route_is_format_bound() {
     let seed = seeds()[1];
     for acct in [0u32, 3] {
         let sm = slot_master_entropy_from_bip39(&seed, acct);
-        let (_key, pk_seed, _root) = derive_c10_slot_keypair(&sm, 1, 2);
+        let (key, pk_seed, root) = derive_c10_slot_keypair(&sm, 1, 2);
         let e = slot_entropy(&sm, 1, 2);
-        let (_, want) = slot_seeds_with_format(&compiled_format_id(), &e);
+        let (want_sk, want) = slot_seeds_with_format(&compiled_format_id(), &e);
         assert_eq!(pk_seed, want, "slot keypair does not use the format-bound seeds");
+        // what keygen actually consumed (Astra r17 final: the secret seed too)
+        assert_eq!(key.sk_seed(), &want_sk, "slot keypair secret seed is not the format-bound one");
+        assert_eq!(&key.pk_seed()[..], &want[..16]);
+        assert_eq!(key.pk_root(), &root[..16]);
+        assert_eq!(SigningKey::keygen(want_sk, want[..16].try_into().unwrap()).pk_root(), key.pk_root());
         let stock: [u8; 32] = Sha256::digest([&b"slot_c10_pk_seed"[..], &e[..]].concat()).into();
         assert_ne!(&pk_seed[..16], &stock[..16]);
+    }
+}
+
+/// The entropy wrappers (PBKDF2 then the bip39-seed derivations) and the bootstrap keypair route are format-bound,
+/// and the bootstrap key's keygen consumed exactly the format-bound seeds.
+#[test]
+fn public_entropy_routes_are_format_bound() {
+    let entropy = [0x11u8; 32];
+    let bip39_seed = Mnemonic::from_entropy(&entropy).to_seed("");
+    let fid = compiled_format_id();
+    for acct in [0u32, 4] {
+        let (pk, sk) = derive_c10_master_from_entropy(&entropy, acct);
+        assert_eq!((pk, sk), derive_c10_master_from_bip39_seed(&bip39_seed, acct));
+        let m = bootstrap_master_with_format(&fid, &bip39_seed, acct);
+        let want_sk: [u8; 32] = Sha256::digest([&b"sk_seed"[..], &m[..32]].concat()).into();
+        assert_eq!(sk, want_sk);
+        let (key, pk32, root32) = derive_c10_master_keypair_from_entropy(&entropy, acct);
+        assert_eq!(key.sk_seed(), &want_sk, "bootstrap keypair secret seed is not the format-bound one");
+        assert_eq!(&key.pk_seed()[..], &pk[..16]);
+        assert_eq!(pk32, pk);
+        assert_eq!(key.pk_root(), &root32[..16]);
+        assert_eq!(slot_master_entropy_from_entropy(&entropy, acct), slot_master_with_format(&fid, &bip39_seed, acct));
     }
 }

@@ -2377,3 +2377,25 @@ Astra (`dc80e9fb6`; all 24 generated files match an in-memory replay of `apply.p
    - SPHINCS+C is not classical-only. Per Astra, its Appendix E already analyses quantum S-TCR(+C), including Lemma E.4 (we have not verified this ourselves).
    - The missing work is therefore the **C10-specific composition**: the bounded grinding caps, the target-sum encoding term, the multi-target bootstrap at C chains, and the v2 byte layout — on top of existing quantum component results, not a QROM treatment from scratch.
    - Revised paper-proof estimate: about 0.5–2 person-months. The machine-checked estimate is unchanged (new oracle techniques, so a new development).
+
+### 6. Gate (d), final state and Astra's last pass (UPDATE 2026-11-14)
+
+**Final construction** (amends §3):
+- **Keys and tags:** the bootstrap HMAC keys are `"pq1-c10-fmt-boot-acc0"` / `"…-acct"` ‖ FMT_ID, 53 B each. The slot masters are `"pq1-c10-fmt-slot-acc0"` / `"…-acct"` ‖ FMT_ID ‖ seed ‖ (0x00 | be32(account)), 118 / 121 B. The slot seeds are `"slot_c10_{sk,pk}_seed"` ‖ FMT_ID ‖ slot_entropy, 80 B.
+- **Legacy routes removed:** the seven legacy "c7" seed-to-key routes (`slhdsa_seed_from_bip39`, `bootstrap_seed_from_bip39` and five wrappers) do not exist under `format-kdf` (`0457157fa`). They are retired in production (`RETIRED_LEGACY_VK`); their only callers are the `duress-provision-e2e` test and two DVT/SCA tools.
+- **Tests:** 11 tests pass under 9 format builds. The last one added is `public_entropy_routes_are_format_bound`, and the slot-route test now asserts what keygen consumed (`sk_seed()`, `pk_seed()`, `pk_root()`).
+- **Plants:** 13, all caught — 7 binding sites, 3 routing bypasses, 2 secret-seed-only substitutions, 1 label byte.
+- **Controls:** 3 — v2 without the flag, the flag on v1, and the 7 legacy names.
+
+**Astra (`0457157fa`): "FIX for gate (d)'s coverage claim. No current binding or label defect found."**
+- **Labels:** correct. The normalized HMAC (key, message) pairs and the SHA-256 inputs are distinct across formats, branches and the stock derivation.
+- **Pinned outputs:** all seven reproduce independently.
+- **Routes:** every dedicated BIP-39 or entropy derivation route is format-bound or compiled out.
+- **The one gap** was the keypair-consumption check: only the returned `pk_seed` was compared. It is closed in this commit, with the two secret-seed plants above.
+
+**Not covered:**
+- generic hashing, the explicit-fid helpers and raw `derive_signing_key` remain callable (not a universal prohibition);
+- the stock-derivation mirrors in `secure/src/sign_timing.rs`, `tools/dvt/derive` and `tools/sca/kdf_target` are outside the policy;
+- feature combinations beyond the 9-build matrix are untested.
+
+**Statement:** with the flag off, the stock derivation is byte-identical. Joint v1 + v2 security on one seed today is **UNRESOLVED**. For the covered profiles, under the stated assumptions, the format-bound derivation removes deterministic cross-format sharing. This is not a complete joint-security proof or deployment-wide enforcement.

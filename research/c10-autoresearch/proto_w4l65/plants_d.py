@@ -25,6 +25,13 @@ plants = [
      'let _ = slot_master_with_format;', "public_api_is_the_compiled_format"),
     ("slot-seed route", 'return slot_seeds_with_format(&compiled_format_id(), slot_entropy);',
      'let _ = slot_seeds_with_format;', "public_slot_keypair_route_is_format_bound"),
+    # what keygen consumes: the secret seed alone substituted after the (correct) public seed was returned
+    ("slot keypair secret", '    let (mut sk_seed_32, pk_seed_32) = derive_c10_slot_seeds(&entropy);\n',
+     '    let (mut sk_seed_32, pk_seed_32) = derive_c10_slot_seeds(&entropy);\n    sk_seed_32[0] ^= 1;\n',
+     "slot keypair secret seed is not the format-bound one"),
+    ("bootstrap keypair secret", 'c10_keygen_from_n_masked_seeds(&sk_seed_32, &pk_seed_32, progress, 20, 100)',
+     'c10_keygen_from_n_masked_seeds(&{ let mut x = sk_seed_32; x[0] ^= 1; x }, &pk_seed_32, progress, 20, 100)',
+     "bootstrap keypair secret seed is not the format-bound one"),
     # encodings: a label byte changed (the independent formulas and the pinned vectors must notice)
     ("bootstrap label", 'b"pq1-c10-fmt-boot-acc0"', 'b"pq1-c10-fmt-boot-acc1"', "kdf_encodings_match_independent_formulas"),
 ]
