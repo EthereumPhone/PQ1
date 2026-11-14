@@ -305,11 +305,35 @@ accepts kinds 4 / 5 only when the matching bit is set. Bit 5 is
 `SIGN_USEROP_BATCH` member accept up to 8192 B of `data` (see the unified sign
 input below); without it the cap is 4096. Bit 6 is `CAP_OFFCHAIN_PERMIT2`
 (UPDATE 2026-10-23): `0x62 SIGN_OFFCHAIN` accepts kind 6 (a Uniswap Permit2
-permit) only when it is set. The capability word is
+permit) only when it is set. Bit 7 is `CAP_ERC20_BUNDLE_SET` (UPDATE
+2026-11-14): one request may carry up to 7 ERC-20 bundles (see
+§ERC-20 bundle set below). The capability word is
 bytes 21–24 (u32 BE) of the response, after `protocol_version` (2),
 `fw_version` (3) and the 16-byte `device_uid` placeholder. Do not infer that support from the
 three `fw_version` bytes: they are currently a fixed placeholder rather than
 the running image identity.
+
+### ERC-20 bundle set
+
+`ERC20_SET` envelope (`CAP_ERC20_BUNDLE_SET`, GET_DEVICE_INFO bit 7, UPDATE
+2026-11-14): `magic u16 BE 0xE020 | version u8 = 1 | count u8 1..=6 |
+count × { u16 BE len 1..=1120, ERC-20 bundle }`, at most 4096 B, consumed
+exactly. Each bundle is verified like slot 0; one that does not verify, or is
+for another chain, is dropped (that token shows as a raw integer). A framing
+error, the same token twice, two different bundles for one token, or more than
+7 tokens in total refuses the request. Every screen resolves the token it shows
+by its exact `(chain, address)`, so an entry for an address the request does
+not sign changes nothing, and a Safe refund `gasToken` entry never labels the
+inner call. Firmware without bit 7 refuses a non-empty slot 1 / tail: send the
+envelope only when the bit is set.
+
+Where it goes: `SIGN_USEROP` slot 1 (the slot after the slot-0 ERC-20 bundle,
+formerly reserved; `SIGN_USEROP_MAX_PAYLOAD_LEN` = 36,396), the optional tail of
+off-chain kinds 2 / 3 / 4 (above / below), and in `SIGN_USEROP_BATCH` up to 7
+`TRAILER_KIND_ERC20` records that form one batch-wide set. Typical users: both
+legs of a swap (ERC-7730 `tokenAmount` paths), several tokens in a Safe
+MultiSend (without the set, two catalogued tokens refused), and a Safe refund
+paid in an ERC-20 `gasToken` (without the set, base units).
 
 ### 0x60 GET_WALLET_ADDRESS
 
@@ -403,7 +427,13 @@ Payload layout (immediately after the 17-byte header):
                               // dynamic/composite members use hash words.
 [u16 BE] trailer_len          // ERC-7730 descriptor trailer length
 [u8; trailer_len] trailer     // ERC-7730 bundle (see docs/companion/erc7730-integration.md)
+[u16 BE] erc20_set_len        // OPTIONAL (bit 7), kinds 2 and 3: 1..=4096
+[u8; erc20_set_len] erc20_set // ERC20_SET envelope: token metadata for amounts
 ```
+
+The `erc20_set` tail is absent (payload ends after the trailer) unless the
+device sets capability bit 7; present, it must be non-empty and end the
+payload exactly.
 
 The minimum payload length is `2 + 32 + 32 + 2 + 2 = 70` bytes (empty
 `encoded_data` + zero-length trailer reaches the strict framing parser but is
@@ -459,9 +489,12 @@ Kind 4 payload (all lengths `u16` BE), consumed exactly:
                                                       setPreSignature (direct or one MultiSendCallOnly record,
                                                       owner = the Safe); MUST be 0 otherwise
 [names_count u8]{[len][name bundle]}×n   n ≤ 4, 0 < len ≤ 1093
+[erc20_set_len][ERC20_SET envelope]   OPTIONAL (bit 7): 1..=4096; further tokens (MultiSend records,
+                                      the refund gasToken)
 ```
 
-`MIN_OFFCHAIN_SAFE_TX_LEN = 290`, `MAX_OFFCHAIN_SAFE_TX_LEN = 12,334`. The
+`MIN_OFFCHAIN_SAFE_TX_LEN = 290`, `MAX_OFFCHAIN_SAFE_TX_LEN = 16,432` (12,334
+before the optional set tail). The
 device refuses: chain ≠ `canonical.chain_id`, a zero Safe address,
 `keccak(raw_data) ≠ dataHash`, a DELEGATECALL to anything but a pinned
 MultiSendCallOnly deployment (each record `operation = 0`, the usual record

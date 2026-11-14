@@ -216,9 +216,10 @@ pub enum PathOp {
     RootMetadata = 0x12,
     /// `.<field>` — by field index into the ABI shape table.
     FieldIdx = 0x20,
-    /// `[idx]` — array index (4 B BE).
+    /// `[idx]` — array index (2 B BE; the op is 3 bytes in all).
     ArrayIdx = 0x21,
-    /// `[start:end]` — slice (4 B BE start, 4 B BE end).
+    /// `[start:end]` / `[-len:]` — slice: 2 B BE start, 2 B BE len, 1 B
+    /// `from_end` flag (the op is 6 bytes in all).
     ArraySlice = 0x22,
     /// `[-1]` — last element of an array.
     ArrayLast = 0x23,

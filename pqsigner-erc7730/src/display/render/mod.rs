@@ -53,6 +53,7 @@ use crate::render::params::{
 use crate::render::visibility::{should_render_with_mode, Action};
 use crate::render::RenderErr;
 use pqsigner_tx::erc20::bundle::Erc20Metadata;
+use pqsigner_tx::erc20::set::Erc20Scope;
 use pqsigner_tx::names::NameResolver;
 use pqsigner_tx_core::eip1559::{Eip1559Tx, U256};
 use sha2::{Digest, Sha256};
@@ -441,7 +442,7 @@ pub fn render_erc7730_pages<'ir>(
 ) -> Result<Pages, RenderErr> {
     let mut pages = Pages::with_len(0);
     render_erc7730_pages_scoped_into(
-        tx, inner_data, descriptor, erc20, resolver, None, &mut pages,
+        tx, inner_data, descriptor, Erc20Scope::from(erc20), resolver, None, &mut pages,
     )?;
     Ok(pages)
 }
@@ -465,7 +466,7 @@ pub fn render_erc7730_pages_with_signer<'ir>(
         tx,
         inner_data,
         descriptor,
-        erc20,
+        Erc20Scope::from(erc20),
         resolver,
         device_signer,
         &mut pages,
@@ -489,7 +490,7 @@ pub fn render_erc7730_pages_with_signer_checked<'ir>(
         tx,
         inner_data,
         descriptor,
-        erc20,
+        Erc20Scope::from(erc20),
         resolver,
         device_signer,
         &mut pages,
@@ -521,7 +522,7 @@ pub fn render_erc7730_proof_set_pages_with_signer_checked<'ir>(
         tx,
         inner_data,
         proof_set,
-        erc20,
+        Erc20Scope::from(erc20),
         resolver,
         device_signer,
         expected_nested,
@@ -545,7 +546,7 @@ pub fn render_erc7730_pages_with_signer_into<'ir>(
     tx: &Eip1559Tx,
     inner_data: &[u8],
     descriptor: &'ir VerifiedDescriptor<'ir>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     device_signer: &[u8; 20],
     pages: &mut Pages,
@@ -570,7 +571,7 @@ pub fn render_erc7730_proof_set_pages_with_signer_into<'ir>(
     tx: &Eip1559Tx,
     inner_data: &[u8],
     proof_set: &VerifiedProofSet<'ir>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     device_signer: &[u8; 20],
     expected_nested: Option<&NestedCallBinding>,
@@ -595,7 +596,7 @@ fn render_erc7730_proof_set_pages_with_signer_into_with_enrollments<'ir>(
     tx: &Eip1559Tx,
     inner_data: &[u8],
     proof_set: &VerifiedProofSet<'ir>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     device_signer: &[u8; 20],
     expected_nested: Option<&NestedCallBinding>,
@@ -664,7 +665,7 @@ fn render_erc7730_pages_scoped_into<'ir>(
     tx: &Eip1559Tx,
     inner_data: &[u8],
     descriptor: &'ir VerifiedDescriptor<'ir>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     device_signer: Option<&[u8; 20]>,
     pages: &mut Pages,
@@ -706,7 +707,7 @@ fn render_erc7730_pages_inner_into<'ir>(
     tx: &Eip1559Tx,
     inner_data: &[u8],
     descriptor: &'ir VerifiedDescriptor<'ir>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     device_signer: Option<&[u8; 20]>,
     nested_calldata: Option<NestedCalldataRenderCtx<'_, 'ir>>,
@@ -766,7 +767,7 @@ fn render_contract_format_scope<'ir>(
     descriptor: &VerifiedDescriptor<'ir>,
     format: &crate::ir::FormatHeader<'ir>,
     container: &formatters::ContractContainerCtx,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     nested_calldata: Option<NestedCalldataRenderCtx<'_, 'ir>>,
 ) -> Result<u32, RenderErr> {
@@ -905,7 +906,7 @@ pub fn render_erc7730_eip712_pages<'ir>(
         primary_type_hash,
         encoded_data,
         descriptor,
-        erc20,
+        Erc20Scope::from(erc20),
         resolver,
         &mut pages,
     )?;
@@ -922,7 +923,7 @@ pub fn render_erc7730_eip712_pages_into<'ir>(
     primary_type_hash: &[u8; 32],
     encoded_data: &[u8],
     descriptor: &'ir VerifiedDescriptor<'ir>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     pages: &mut Pages,
 ) -> Result<ContractTranscriptReceipt, RenderErr> {
@@ -972,7 +973,7 @@ pub fn render_erc7730_eip712_pages_v3<'ir>(
         encoded_data,
         nested_blob,
         descriptor,
-        erc20,
+        Erc20Scope::from(erc20),
         resolver,
         &mut pages,
     )?;
@@ -990,7 +991,7 @@ pub fn render_erc7730_eip712_pages_v3_into<'ir>(
     encoded_data: &[u8],
     nested_blob: &[u8],
     descriptor: &'ir VerifiedDescriptor<'ir>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     pages: &mut Pages,
 ) -> Result<ContractTranscriptReceipt, RenderErr> {
@@ -1016,7 +1017,7 @@ fn render_erc7730_eip712_pages_scoped_into<'ir>(
     encoded_data: &[u8],
     nested_blob: &[u8],
     descriptor: &'ir VerifiedDescriptor<'ir>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     pages: &mut Pages,
 ) -> Result<ContractTranscriptReceipt, RenderErr> {
@@ -1059,7 +1060,7 @@ fn render_erc7730_eip712_pages_inner_into<'ir>(
     encoded_data: &[u8],
     nested_blob: &[u8],
     descriptor: &'ir VerifiedDescriptor<'ir>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     pages: &mut Pages,
 ) -> Result<(), RenderErr> {
@@ -1207,9 +1208,9 @@ fn authenticated_contract_intent<'a>(
     ir: &crate::ir::Erc7730Ir<'_>,
     format: &crate::ir::FormatHeader<'_>,
     body: &[u8],
-    erc20: Option<&Erc20Metadata<'a>>,
+    erc20: Erc20Scope<'_, 'a>,
 ) -> Result<Option<&'static [u8]>, RenderErr> {
-    let Some(meta) = erc20 else {
+    let Some(meta) = erc20.lookup_exact(container.chain_id, &container.target) else {
         return Ok(None);
     };
     if meta.chain_id != container.chain_id
@@ -1424,7 +1425,7 @@ fn render_fields<'ir>(
     full_body: &[u8],
     calldata_mode: formatters::ContractCalldataMode,
     container: &formatters::ContractContainerCtx,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     nested: &mut NestedCtx<'_>,
     interpolation: &mut InterpolationState<'_>,
@@ -1552,7 +1553,7 @@ fn render_nested_calldata_field<'ir>(
     field: &crate::ir::FieldEntry<'ir>,
     params: &crate::render::params::ParamSet<'ir>,
     field_ordinal: u8,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     context: NestedCalldataRenderCtx<'_, 'ir>,
 ) -> Result<(), RenderErr> {
@@ -1783,7 +1784,7 @@ fn render_one_field(
     static_head_words: u16,
     calldata_mode: formatters::ContractCalldataMode,
     container: &formatters::ContractContainerCtx,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
 ) -> Result<Option<RenderedFieldWitness>, RenderErr> {
     match should_render_with_mode(params, None, COMPACT_MODE) {
@@ -1915,7 +1916,7 @@ fn render_nested_struct(
     nested: &mut NestedCtx<'_>,
     depth: u8,
     container: &formatters::ContractContainerCtx,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
 ) -> Result<(), RenderErr> {
     use crate::render::nested as pn;
@@ -2063,7 +2064,7 @@ fn render_nested_subfields(
     nested: &mut NestedCtx<'_>,
     depth: u8,
     container: &formatters::ContractContainerCtx,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
 ) -> Result<(), RenderErr> {
     for sf in np.sub_fields() {

@@ -2008,6 +2008,40 @@ fn consume_normalized_token(rendered: &[String], cursor: &mut usize, expected: &
     *cursor += relative_match + 1;
 }
 
+/// Rows with an exact amount re-joined: the firmware wraps a long amount over
+/// up to three rows and marks every split with a trailing `>` on the row
+/// before it and a leading `>` on the row after it. Returns each joined row
+/// with the number of rendered rows it spans.
+fn joined_amount_rows_spans(rendered: &[String]) -> Vec<(String, usize)> {
+    let mut out: Vec<(String, usize)> = Vec::new();
+    for row in rendered {
+        if let Some((last, span)) = out.last_mut() {
+            if last.ends_with('>') && row.starts_with('>') && row != ">next" {
+                last.pop();
+                last.push_str(&row[1..]);
+                *span += 1;
+                continue;
+            }
+        }
+        out.push((row.clone(), 1));
+    }
+    out
+}
+
+fn joined_amount_rows(rendered: &[String]) -> Vec<String> {
+    joined_amount_rows_spans(rendered).into_iter().map(|(row, _)| row).collect()
+}
+
+/// [`consume_normalized_token`] for an exact amount that may be wrapped.
+fn consume_amount(rendered: &[String], cursor: &mut usize, expected: &str) {
+    let joined = joined_amount_rows_spans(&rendered[*cursor..]);
+    let normalized = normalize_text(expected);
+    let Some(i) = joined.iter().position(|(row, _)| row == &normalized) else {
+        panic!("expected amount {expected:?} was not rendered in order; joined rows={joined:?}");
+    };
+    *cursor += joined[..=i].iter().map(|(_, span)| span).sum::<usize>();
+}
+
 fn consume_raw_word(rendered: &[String], cursor: &mut usize, word: &[u8; 32]) {
     let encoded = hex::encode(word);
     for chunk in encoded.as_bytes().chunks(16) {
@@ -2653,8 +2687,7 @@ fn lido_v2_steth_high_precision_stake_reaches_leaf_and_renders_exactly() {
     let rendered = normalized_rows(&pages);
     let mut cursor = 0usize;
     consume_normalized_token(&rendered, &mut cursor, "Amount");
-    consume_normalized_token(&rendered, &mut cursor, "1.07860842400053");
-    consume_normalized_token(&rendered, &mut cursor, "4547 ETH");
+    consume_amount(&rendered, &mut cursor, "1.078608424000534547 ETH");
 }
 
 #[test]
@@ -3729,13 +3762,7 @@ fn lido_wsteth_high_precision_calls_render_or_refuse_only_on_title_budget() {
             });
             let rendered = normalized_rows(&pages);
             let mut cursor = 0usize;
-            for chunk in expected_amount.as_bytes().chunks(DISPLAY_COLS) {
-                consume_normalized_token(
-                    &rendered,
-                    &mut cursor,
-                    std::str::from_utf8(chunk).expect("expected amount is ASCII"),
-                );
-            }
+            consume_amount(&rendered, &mut cursor, expected_amount);
         } else {
             let error = match result {
                 Err(error) => error,
@@ -3994,7 +4021,9 @@ fn weth_canonical_deposit_and_withdraw_render_on_each_pinned_deployment() {
             consume_full_address(&half_withdraw, &mut cursor, &contract);
         } else {
             assert!(
-                half_withdraw.join("").contains("500000000000000000")
+                joined_amount_rows(&half_withdraw)
+                    .iter()
+                    .any(|row| row.contains("500000000000000000"))
                     && half_withdraw.iter().any(|row| row == "!raw,dec=?"),
                 "Sepolia without metadata must expose the exact raw amount: {half_withdraw:?}"
             );

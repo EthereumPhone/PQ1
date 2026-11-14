@@ -276,6 +276,9 @@ mod film_landing_pure_tests;
 mod safe_screens_render_pure_tests;
 
 #[cfg(test)]
+mod erc20_set_safe_render_pure_tests;
+
+#[cfg(test)]
 mod userop_screens_render_pure_tests;
 
 #[cfg(test)]

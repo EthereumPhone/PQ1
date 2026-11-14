@@ -78,7 +78,7 @@ fn sign_screens(t: &Eip1559Tx, data: &[u8], erc20: Option<&Erc20Metadata<'_>>) -
         .map_err(|_| "the dispatcher refused")?;
     let trailer = facts.trailer(t, TrailerSet::Sign);
     append_handler_trailers(&mut pages, &trailer);
-    let body = UserOpInputs { tx: t, inner_data: data, erc20, selector: None, resolver: &resolver };
+    let body = UserOpInputs { tx: t, inner_data: data, erc20: crate::erc20::set::Erc20Scope::from(erc20), selector: None, resolver: &resolver };
     let inputs = ContentInputs { body: Body::UserOp(body), trailers: &trailer };
     let mut screens = Screens::blank();
     px_lift::emit_content(&mut screens, &inputs).map_err(|_| "the pixel emitter refused")?;

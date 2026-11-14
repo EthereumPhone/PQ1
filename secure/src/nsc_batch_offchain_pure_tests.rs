@@ -2508,17 +2508,23 @@ fn negative_reserved_compatibility_inputs_are_fail_closed() {
     assert!(BATCH_TRAILERS_SRC.contains("reserved trailer"));
     assert!(!CMD_SIGN_USEROP_BATCH_SRC.contains("TRAILER_KIND_RESERVED_V1 =>"));
 
-    // The single-sign wire uses a positional field, so its two-byte length
-    // prefix must remain. A zero cap ensures no payload can revive the retired
-    // slot or shift the following fields.
+    // The single-sign positional slot 1 (formerly reserved, length 0) now
+    // carries the ERC-20 set envelope (CAP_ERC20_BUNDLE_SET). It is capped at
+    // ERC20_SET_MAX_LEN, magic/version/exact-framing checked before any other
+    // work, and built + A/B-proven together with slot 0. Batch kind 2 stays
+    // retired (above).
     let reserved_parse = CMD_SIGN_USEROP_SRC
         .split("let reserved_v1 = match")
         .nth(1)
         .and_then(|tail| tail.split("cursor = reserved_v1.next_cursor").next())
-        .expect("single-sign reserved compatibility parser");
+        .expect("single-sign slot-1 parser");
     assert!(reserved_parse.contains("read_optional_u16_prefixed"));
-    assert!(reserved_parse.contains("\n        0,"));
-    assert!(reserved_parse.contains("reserved slot must be 0"));
+    assert!(reserved_parse.contains("sphincs_tz_shared::ERC20_SET_MAX_LEN,"));
+    assert!(reserved_parse.contains("bad erc20 set"));
+    assert!(CMD_SIGN_USEROP_SRC.contains("crate::erc20::set::parse_erc20_set_envelope("));
+    assert!(CMD_SIGN_USEROP_SRC.contains("crate::erc20::set::DupPolicy::Refuse,"));
+    assert!(CMD_SIGN_USEROP_SRC.contains("if !crate::erc20::set::erc20_set_proven("));
+    assert!(!CMD_SIGN_USEROP_SRC.contains("reserved slot must be 0"));
 }
 
 #[test]
@@ -3267,7 +3273,7 @@ fn negative_proto_constants_used_by_handlers_resolve_to_pinned_values() {
     assert_eq!(MAX_BATCH_TXS, 4);
     assert_eq!(MAX_TX_LEN, 8192);
     assert_eq!(sphincs_tz_shared::MAX_BATCH_CALL_DATA_TOTAL_LEN, 16_384);
-    assert_eq!(sphincs_tz_shared::SIGN_USEROP_MAX_PAYLOAD_LEN, 32_300);
+    assert_eq!(sphincs_tz_shared::SIGN_USEROP_MAX_PAYLOAD_LEN, 36_396);
     assert_eq!(sphincs_tz_shared::SAFE_V1_RAW_DATA_MAX, 4096);
     assert_eq!(SIGN_OFFCHAIN_HEADER_LEN, 17);
     assert_eq!(SIGN_OFFCHAIN_OUTPUT_LEN, 4016);
@@ -3376,5 +3382,36 @@ fn negative_rotation_response_releases_only_the_signed_owner_bytes() {
         // Second binding gates the release.
         assert!(extent < proofs[1] && proofs[1] < section, "{name}: output binding must gate the release");
         assert!(!src.contains("if emit_type1 { SIG_WRAPPER_LEN }"), "{name}: bare 0x0202 Type-1 length");
+    }
+}
+
+#[test]
+fn every_erc20_set_is_fi_proven_before_display() {
+    // CAP_ERC20_BUNDLE_SET: every handler that builds a multi-entry ERC-20
+    // set must run the A/B rebuild proof and refuse when it fails, and the
+    // proof itself must rebuild after a random delay, compare the exact
+    // borrowed entries and read its verdict twice.
+    const STRUCTURED_SRC: &str = include_str!("nsc/cmd_sign_offchain_structured.rs");
+    const SET_SRC: &str = include_str!("erc20/set.rs");
+    for (name, src, proof) in [
+        ("cmd_sign_userop", CMD_SIGN_USEROP_SRC, "if !crate::erc20::set::erc20_set_proven("),
+        ("cmd_sign_offchain", CMD_SIGN_OFFCHAIN_SRC, "if !crate::erc20::set::erc20_set_proven("),
+        ("cmd_sign_offchain_structured", STRUCTURED_SRC, "if !crate::erc20::set::erc20_set_proven("),
+        ("cmd_sign_userop_batch", CMD_SIGN_USEROP_BATCH_SRC, "if !crate::erc20::set::erc20_batch_set_proven("),
+    ] {
+        assert!(src.contains(proof), "{name}: ERC-20 set built without its FI proof");
+        let built = src.find("crate::erc20::set::").expect("set use");
+        let proven = src.find(proof).unwrap();
+        let scoped = src.find("erc20_set.scope_all()").unwrap_or_else(|| panic!("{name}: no scope_all"));
+        assert!(built < proven && proven < scoped, "{name}: proof must sit between build and display use");
+    }
+    for needle in [
+        "crate::fi::wait_random();",
+        "r.same_entries(built)",
+        "rebuilt.same_entries(built)",
+        "let mut verdict = crate::fi::FAIL_SENTINEL;",
+        "a == crate::fi::OK_SENTINEL && b == crate::fi::OK_SENTINEL",
+    ] {
+        assert!(SET_SRC.contains(needle), "erc20/set.rs lost `{needle}`");
     }
 }

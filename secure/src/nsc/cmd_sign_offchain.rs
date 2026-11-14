@@ -538,6 +538,32 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         let encoded_data_len = encoded_data.len();
         let nested_blob = frame.nested_blob;
         let trailer = frame.trailer;
+        // Optional ERC-20 bundles (CAP_ERC20_BUNDLE_SET): the typed-data
+        // renderer resolves each `tokenAmount` by the exact token address the
+        // signed struct names; unbound entries are never shown.
+        let erc20_env = frame.erc20_set;
+        let erc20_set = match crate::erc20::set::build_erc20_set(
+            &[],
+            erc20_env,
+            chain_id,
+            crate::erc20::set::DupPolicy::Refuse,
+        ) {
+            Ok(set) => set,
+            Err(_) => {
+                crate::ui::show_status("EIP-1271", "bad erc20 set");
+                return NscStatus::InvalidPointer as u32;
+            }
+        };
+        if !crate::erc20::set::erc20_set_proven(
+            &[],
+            erc20_env,
+            chain_id,
+            crate::erc20::set::DupPolicy::Refuse,
+            &erc20_set,
+        ) {
+            crate::ui::show_status("EIP-1271", "erc20 set proof");
+            return NscStatus::InvalidPointer as u32;
+        }
         let v = match crate::tx::erc7730::verify_erc7730_bundle(
             trailer,
             &crate::db_roots::ERC7730_DESCRIPTORS_ROOT,
@@ -677,7 +703,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 encoded_data,
                 nested_blob,
                 &v,
-                None,
+                erc20_set.scope_all(),
                 &resolver,
             )
         } else {
@@ -687,7 +713,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 &primary_type_hash,
                 encoded_data,
                 &v,
-                None,
+                erc20_set.scope_all(),
                 &resolver,
             )
         };

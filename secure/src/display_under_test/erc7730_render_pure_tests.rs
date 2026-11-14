@@ -10388,7 +10388,7 @@ fn eip712_v2_two_pass_transcript_binds_static_warning_and_fields() {
         &format.type_hash,
         &encoded_data,
         &verified,
-        None,
+        crate::erc20::set::Erc20Scope::empty(),
         &resolver,
     )
     .expect("checked V2 EIP-712 render");
@@ -10861,7 +10861,7 @@ fn v3_permit_single_renders_nested_members() {
         &top_ed,
         &nested_blob,
         &verified,
-        None,
+        crate::erc20::set::Erc20Scope::empty(),
         &resolver,
     )
     .expect("valid PermitSingle clear-signs via checked V3");
@@ -16415,4 +16415,78 @@ fn production_layerswap_routes_render_only_the_signed_funding_action() {
     let mut tampered_bundle = bundle;
     *tampered_bundle.last_mut().expect("proof byte") ^= 1;
     assert!(verify_erc7730_bundle(&tampered_bundle, &registry.root).is_err());
+}
+
+// ───────────────────────────────────────────────────────────────────────
+// ERC-20 bundle SET (CAP_ERC20_BUNDLE_SET): a swap shows BOTH legs in exact
+// decimals when the request carries an entry per token; with one entry the
+// other leg stays the loud raw integer.
+// ───────────────────────────────────────────────────────────────────────
+
+fn render_router02_with_scope(
+    calldata: &[u8],
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
+) -> String {
+    let registry = build_registry();
+    let entry = find_leaf(registry, "calldata-UniswapV3Router02.json", 1);
+    let bundle = synth_bundle(&registry.blob, &entry.ir_bytes, entry.leaf_index);
+    let verified = verify_erc7730_bundle(&bundle, &registry.root).expect("verify Router02 leaf");
+    let tx = envelope(1, UNI_V3);
+    let mut pages = Pages::with_len(0);
+    pqsigner_erc7730::display::render::render_erc7730_pages_with_signer_into(
+        &tx,
+        calldata,
+        &verified,
+        erc20,
+        &NameResolver::new(),
+        &[0x44; 20],
+        &mut pages,
+    )
+    .expect("Router02 render");
+    assert_all_pages_printable(&pages);
+    (0..pages.len)
+        .flat_map(|p| pages.buf[p].iter())
+        .map(|row| row.iter().map(|&b| b as char).collect::<String>().trim_end().to_string())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn swap_leg_metas() -> [Erc20Metadata<'static>; 2] {
+    [
+        Erc20Metadata { chain_id: 1, contract: TOKEN_IN, decimals: 6, name: b"In Dollar", symbol: b"INUSD" },
+        Erc20Metadata { chain_id: 1, contract: TOKEN_OUT, decimals: 18, name: b"Out Ether", symbol: b"OUTETH" },
+    ]
+}
+
+#[test]
+fn uniswap_swap_shows_both_legs_in_decimals_with_an_entry_per_token() {
+    let recipient = [0x33; 20];
+    let [m_in, m_out] = swap_leg_metas();
+    let mut set = crate::erc20::set::Erc20Set::new();
+    set.insert(m_in);
+    set.insert(m_out);
+    let mut only_in = crate::erc20::set::Erc20Set::new();
+    only_in.insert(m_in);
+
+    let single = calldata_uniswap_single(UNI_EXACT_INPUT_SINGLE, recipient, 1_500_000, 1_000_000, 0);
+    let packed = calldata_uniswap_packed(
+        UNI_EXACT_INPUT_PACKED,
+        &[TOKEN_IN, TOKEN_MID, TOKEN_OUT],
+        &[500, 3_000],
+        recipient,
+        u256_from_u64(1_500_000),
+        u256_from_u64(1_000_000),
+    );
+    for calldata in [&single, &packed] {
+        let text = render_router02_with_scope(calldata, set.scope_all());
+        assert!(text.contains("1.5 INUSD") || (text.contains("1.5") && text.contains("INUSD")), "{text}");
+        assert!(text.contains("0.000000000001"), "output leg must be exact decimals:\n{text}");
+        assert!(text.contains("OUTETH"), "{text}");
+        assert!(!text.contains("dec=?"), "no leg may fall back to raw:\n{text}");
+
+        let text = render_router02_with_scope(calldata, only_in.scope_all());
+        assert!(text.contains("INUSD"));
+        assert!(!text.contains("OUTETH"));
+        assert!(text.contains("dec=?"), "the leg without an entry stays loud raw:\n{text}");
+    }
 }

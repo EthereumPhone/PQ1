@@ -1081,13 +1081,28 @@ pub const CAP_SIGN_USEROP_DATA_8K: u32 = 1 << 5;
 /// `GET_DEVICE_INFO.capabilities` bit 6: `CMD_SIGN_OFFCHAIN` accepts
 /// [`OFFCHAIN_KIND_PERMIT2`]. Same gating rule as [`CAP_OFFCHAIN_SAFE_TX`].
 pub const CAP_OFFCHAIN_PERMIT2: u32 = 1 << 6;
+/// `GET_DEVICE_INFO.capabilities` bit 7: a sign request may carry SEVERAL
+/// Merkle-proven ERC-20 metadata bundles in an [`ERC20_SET_MAGIC`] envelope:
+/// `CMD_SIGN_USEROP` wire slot 1 (formerly reserved, length 0), an optional
+/// `[u16 len][envelope]` tail on `OFFCHAIN_KIND_EIP712_TYPED{,_V3}` (after the
+/// ERC-7730 trailer) and `OFFCHAIN_KIND_SAFE_TX` (after the names section),
+/// and up to [`ERC20_SET_CAPACITY`] `TRAILER_KIND_ERC20` records in one
+/// `CMD_SIGN_USEROP_BATCH`. The device looks a token up by the exact
+/// `(chain_id, contract)` the signed data names, so two-token calls, Safe
+/// batches and a Safe refund paid in a token each get their own metadata.
+/// The bit also marks the firmware release whose amount layout shows every
+/// realistic fee and amount exactly (no companion-side fee rounding needed).
+/// Firmware without the bit refuses every one of these encodings, so
+/// companions MUST gate on the bit and never probe by error.
+pub const CAP_ERC20_BUNDLE_SET: u32 = 1 << 7;
 /// Capability bitmap emitted by the current firmware.
 pub const DEVICE_CAPABILITIES: u32 = CAP_SIGN_USEROP
     | CAP_ERC7730_PROOF_SET
     | CAP_OFFCHAIN_SAFE_TX
     | CAP_OFFCHAIN_COW_ORDER
     | CAP_SIGN_USEROP_DATA_8K
-    | CAP_OFFCHAIN_PERMIT2;
+    | CAP_OFFCHAIN_PERMIT2
+    | CAP_ERC20_BUNDLE_SET;
 
 // -- Session management (0x10-0x1F) --
 pub const INS_V2_UNLOCK: u8 = 0x10;
@@ -1339,9 +1354,13 @@ pub const MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN: usize = 512;
 /// Maximum payload length for `OFFCHAIN_KIND_EIP712_TYPED`. Layout:
 /// `domainSep_present(2) + domainSeparator(32) + primaryTypeHash(32) +
 /// encoded_data_len(2) + encoded_data + erc7730_trailer(2 + payload)`.
+///
+/// With [`CAP_ERC20_BUNDLE_SET`] an optional `[u16 len ≥ 1][ERC-20 set
+/// envelope]` tail may follow the trailer.
 pub const MAX_OFFCHAIN_EIP712_TYPED_LEN: usize =
     2 + 32 + 32 + 2 + MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN
-        + 2 + ERC7730_LEGACY_BUNDLE_MAX_LEN;
+        + 2 + ERC7730_LEGACY_BUNDLE_MAX_LEN
+        + 2 + ERC20_SET_MAX_LEN;
 
 /// Maximum length of the descriptor-selected display-witness stream carried in
 /// the legacy-named `nested_blob` section of an
@@ -1363,7 +1382,8 @@ pub const MAX_OFFCHAIN_EIP712_NESTED_LEN: usize = 2048;
 pub const MAX_OFFCHAIN_EIP712_TYPED_V3_LEN: usize =
     2 + 32 + 32 + 2 + MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN
         + 2 + MAX_OFFCHAIN_EIP712_NESTED_LEN
-        + 2 + ERC7730_LEGACY_BUNDLE_MAX_LEN;
+        + 2 + ERC7730_LEGACY_BUNDLE_MAX_LEN
+        + 2 + ERC20_SET_MAX_LEN;
 
 /// Per-bundle cap of a kind-8 name bundle carried in an
 /// `OFFCHAIN_KIND_SAFE_TX` payload. Mirrors `pqsigner_tx::names::bundle::
@@ -1387,6 +1407,7 @@ pub const MIN_OFFCHAIN_SAFE_TX_LEN: usize = 2 + SAFE_V1_CANONICAL_LEN + 2 + 2 + 
 ///   [erc20_len:2][erc20 bundle]                                      ≤ COW_ORDER_BUNDLE_MAX (1120)
 ///   [cow_len:2][CoW order trailer]                                   ≤ COW_ORDER_TRAILER_MAX_LEN
 ///   [names_count:1]{[name_len:2][name bundle]}×names_count           ≤ 4 × (2 + 1093)
+///   [set_len:2 ≥ 1][ERC-20 set envelope]   optional, CAP_ERC20_BUNDLE_SET ≤ ERC20_SET_MAX_LEN
 /// ```
 /// The `safe_v1` section is byte-identical to the on-chain `approveHash`
 /// trailer; the CoW section (present iff the SafeTx's inner call is a
@@ -1399,7 +1420,9 @@ pub const MAX_OFFCHAIN_SAFE_TX_LEN: usize = 2
     + 2
     + COW_ORDER_TRAILER_MAX_LEN
     + 1
-    + OFFCHAIN_MAX_NAME_BUNDLES * (2 + OFFCHAIN_NAME_BUNDLE_MAX_LEN);
+    + OFFCHAIN_MAX_NAME_BUNDLES * (2 + OFFCHAIN_NAME_BUNDLE_MAX_LEN)
+    + 2
+    + ERC20_SET_MAX_LEN;
 
 /// Minimum `OFFCHAIN_KIND_COW_ORDER` payload: the 204-byte canonical
 /// GPv2Order plus the two (possibly zero) leg-bundle length words.
@@ -1874,8 +1897,8 @@ pub const SLOT_INDEX_MASK: u32 =
 /// | 330 |  N  | data |
 /// | 330+N | 2 | erc20_bundle_len (u16 BE; 0 = no bundle) |
 /// | 332+N | B | erc20_bundle (Merkle-verified ERC-20 metadata, see `erc20::bundle`) |
-/// | 332+N+B | 2 | reserved_v1_len (u16 BE; MUST be 0) |
-/// | 334+N+B | 0 | reserved compatibility slot (no bytes parsed) |
+/// | 332+N+B | 2 | erc20_set_len (u16 BE; 0 = none; ≤ [`ERC20_SET_MAX_LEN`]) |
+/// | 334+N+B | S | extra ERC-20 bundles in an [`ERC20_SET_MAGIC`] envelope (requires [`CAP_ERC20_BUNDLE_SET`]) |
 ///
 /// All three trailing sections are optional. When a section's length is
 /// zero the next section immediately follows.
@@ -1898,10 +1921,43 @@ const _: () = assert!(SIGN_USEROP_HEADER_LEN == 330);
 ///
 /// A literal because `proto` has no dependencies and three of the trailer
 /// maxima live in `pqsigner-tx`.
-pub const SIGN_USEROP_MAX_PAYLOAD_LEN: usize = 32_300;
+pub const SIGN_USEROP_MAX_PAYLOAD_LEN: usize = 36_396;
 const _: () = assert!(SIGN_USEROP_MAX_PAYLOAD_LEN > SIGN_USEROP_HEADER_LEN + MAX_TX_LEN);
 
-// Wire slot 1 is reserved for compatibility and its length MUST remain zero.
+// ═══════════════════════════════════════════════════════════════════════════
+//   ERC-20 bundle set envelope (CAP_ERC20_BUNDLE_SET)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// ```text
+//   off 0  magic    u16 BE = ERC20_SET_MAGIC (0xE020)
+//   off 2  version  u8     = ERC20_SET_VERSION (1)
+//   off 3  count    u8     ∈ 1..=ERC20_SET_MAX_EXTRA
+//   off 4  count × { len u16 BE ∈ 1..=ERC20_BUNDLE_MAX_LEN ; bundle[len] }
+// ```
+// Consumed EXACTLY, total ≤ ERC20_SET_MAX_LEN. Absence is expressed by the
+// enclosing length (0 / no tail), never by `count = 0`. Each bundle is the
+// unchanged single ERC-20 bundle format. Together with the primary slot the
+// device holds at most ERC20_SET_CAPACITY tokens; a second bundle for the
+// same `(chain_id, contract)` is refused (batch coalesces identical ones).
+
+/// Envelope magic (big-endian on the wire).
+pub const ERC20_SET_MAGIC: u16 = 0xE020;
+/// Envelope version.
+pub const ERC20_SET_VERSION: u8 = 1;
+/// `magic(2) | version(1) | count(1)`.
+pub const ERC20_SET_HEADER_LEN: usize = 4;
+/// Most bundles one envelope carries (on top of the primary slot).
+pub const ERC20_SET_MAX_EXTRA: usize = 6;
+/// Most distinct tokens the device holds for one request: the primary slot
+/// plus a full envelope (a six-record Safe batch plus its refund token).
+pub const ERC20_SET_CAPACITY: usize = ERC20_SET_MAX_EXTRA + 1;
+/// Largest envelope, bytes.
+pub const ERC20_SET_MAX_LEN: usize = 4096;
+/// Largest single ERC-20 bundle (mirrors `pqsigner_tx::erc20::bundle::
+/// MAX_ERC20_BUNDLE_LEN`, const-asserted there).
+pub const ERC20_BUNDLE_MAX_LEN: usize = 64 + 1024 + 32;
+const _: () = assert!(ERC20_SET_MAX_LEN <= u16::MAX as usize);
+const _: () = assert!(ERC20_SET_HEADER_LEN + 2 + ERC20_BUNDLE_MAX_LEN <= ERC20_SET_MAX_LEN);
 
 // ═══════════════════════════════════════════════════════════════════════════
 //   CoW Protocol / GPv2Settlement — EIP-712 clear-sign (on-device decode)

@@ -20,5 +20,6 @@ pub mod bundle;
 pub mod calldata;
 pub mod dispatch;
 pub mod merkle;
+pub mod set;
 
 pub use dispatch::{dispatch_tx, TxKind};

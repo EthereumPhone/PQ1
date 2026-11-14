@@ -28,7 +28,7 @@ use pqsigner_ui_px::{Look, Screens, Weight};
 pub(crate) struct UserOpInputs<'a> {
     pub(crate) tx: &'a Eip1559Tx,
     pub(crate) inner_data: &'a [u8],
-    pub(crate) erc20: Option<&'a Erc20Metadata<'a>>,
+    pub(crate) erc20: crate::erc20::set::Erc20Scope<'a, 'a>,
     pub(crate) selector: Option<&'a SelectorMeta<'a>>,
     pub(crate) resolver: &'a NameResolver<'a>,
 }
@@ -73,9 +73,10 @@ pub(crate) fn classify<'a>(inp: &UserOpInputs<'a>) -> Result<Route<'a>, ()> {
         return Ok(Route::Value);
     }
     if let Some(call) = parse_erc20_calldata(inp.inner_data) {
-        let meta = inp
-            .erc20
-            .filter(|m| m.chain_id == tx.chain_id)
+        // Keyed lookup on the direct target, mirroring the dispatcher.
+        let meta = tx
+            .to
+            .and_then(|to| inp.erc20.lookup_exact(tx.chain_id, &to))
             .filter(|m| super::value_page::direct_erc20_meta_matches(&m.contract, tx.to.as_ref()));
         return Ok(match meta {
             Some(meta) => {

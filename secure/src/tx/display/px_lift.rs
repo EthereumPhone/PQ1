@@ -50,7 +50,6 @@ use super::screen_kit::BodyReceipt;
 use super::trailer_screens::{self, TrailerFacts, TrailerReceipt};
 use super::userop_screens::{self, Family, UserOpInputs};
 use super::Pages;
-use crate::erc20::bundle::Erc20Metadata;
 use crate::names::NameResolver;
 use crate::tx::eip712::cowswap::VerifiedCowswapV3;
 use crate::tx::eip712::permit2::VerifiedPermit2;
@@ -69,7 +68,7 @@ pub(crate) enum Body<'a> {
         safe_v1: Option<&'a VerifiedSafeV1<'a>>,
         safe_exec: Option<&'a VerifiedSafeExec<'a>>,
         cow: Option<&'a VerifiedCowswapV3>,
-        erc20: Option<&'a Erc20Metadata<'a>>,
+        erc20: crate::erc20::set::Erc20Scope<'a, 'a>,
         resolver: &'a NameResolver<'a>,
     },
     /// A single-UserOp route below the Safe / CoW / ERC-7730 rungs.
@@ -99,7 +98,7 @@ pub(crate) enum Body<'a> {
     SafeOffchain {
         safe: &'a VerifiedSafeV1<'a>,
         cow: Option<&'a VerifiedCowswapV3>,
-        erc20: Option<&'a Erc20Metadata<'a>>,
+        erc20: crate::erc20::set::Erc20Scope<'a, 'a>,
         resolver: &'a NameResolver<'a>,
     },
     /// An off-chain CoW order (`SIGN_OFFCHAIN` kind 5), bound by re-running

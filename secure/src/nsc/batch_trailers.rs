@@ -130,7 +130,13 @@ impl ParsedTrailers {
 /// (`MAX_BATCH_TXS × 5 + MAX_NAME_BUNDLES`) must fit inside
 /// `MAX_TRAILERS_PER_BATCH`. Kind 2 is permanently rejected, while
 /// selector-curated and selector-self-attest are mutually exclusive.
-const _: () = assert!(MAX_TRAILERS_PER_BATCH >= MAX_BATCH_TXS * 5 + MAX_NAME_BUNDLES);
+///
+/// Since `CAP_ERC20_BUNDLE_SET`, ERC-20 records (kind 1) are batch-wide: up
+/// to `ERC20_SET_CAPACITY` across the batch instead of one per member.
+const _: () = assert!(
+    MAX_TRAILERS_PER_BATCH
+        >= MAX_BATCH_TXS * 4 + sphincs_tz_shared::ERC20_SET_CAPACITY + MAX_NAME_BUNDLES
+);
 
 /// Parse the TLV-tagged trailer list starting at `cursor`.
 ///
@@ -186,6 +192,7 @@ pub fn parse_all(
         [None; MAX_TRAILERS_PER_BATCH];
     let mut seen_per_tx: [u8; MAX_BATCH_TXS] = [0u8; MAX_BATCH_TXS];
     let mut seen_batch_wide_names_count: usize = 0;
+    let mut seen_erc20_count: usize = 0;
     let mut total_payload_bytes: usize = 0;
 
     // ── 3. Parse loop ───────────────────────────────────────────────
@@ -261,7 +268,17 @@ pub fn parse_all(
         // Selector curated XOR self-attest per tx — refuse if both
         // appear on the same tx_idx. Batch-wide names: capped at
         // MAX_NAME_BUNDLES total.
-        if kind == TRAILER_KIND_NAME {
+        if kind == TRAILER_KIND_ERC20 {
+            // ERC-20 metadata is batch-wide (CAP_ERC20_BUNDLE_SET): every
+            // member resolves the token it shows by exact address, so a
+            // bundle's `tx_idx` is only a hint. Identical duplicates are
+            // coalesced later; conflicting ones refuse there.
+            seen_erc20_count += 1;
+            if seen_erc20_count > sphincs_tz_shared::ERC20_SET_CAPACITY {
+                ui::show_status("Batch sign", "erc20 >cap");
+                return Err(NscStatus::InvalidPointer as u32);
+            }
+        } else if kind == TRAILER_KIND_NAME {
             seen_batch_wide_names_count += 1;
             if seen_batch_wide_names_count > MAX_NAME_BUNDLES {
                 ui::show_status("Batch sign", "names >cap");
@@ -556,10 +573,28 @@ mod tests {
     #[test]
     fn refuses_duplicate_same_kind_tx_idx() {
         let snap = build(&[
-            (TRAILER_KIND_ERC20, 0, &[]),
-            (TRAILER_KIND_ERC20, 0, &[]),
+            (TRAILER_KIND_SEL_CURATED, 0, &[]),
+            (TRAILER_KIND_SEL_CURATED, 0, &[]),
         ]);
         assert!(parse_all(&snap, 0, snap.len(), 1).is_err());
+    }
+
+    #[test]
+    fn erc20_records_are_batch_wide_up_to_the_set_capacity() {
+        // CAP_ERC20_BUNDLE_SET: several ERC-20 records on one member are
+        // accepted (the handler builds one batch-wide set)...
+        let two = build(&[(TRAILER_KIND_ERC20, 0, &[]), (TRAILER_KIND_ERC20, 0, &[])]);
+        parse_all(&two, 0, two.len(), 1).expect("two erc20 records on one member");
+        let cap: alloc::vec::Vec<(u8, u8, &[u8])> = (0..sphincs_tz_shared::ERC20_SET_CAPACITY)
+            .map(|i| (TRAILER_KIND_ERC20, (i % 2) as u8, &[][..]))
+            .collect();
+        let at_cap = build(&cap);
+        parse_all(&at_cap, 0, at_cap.len(), 2).expect("exactly the capacity");
+        // ...but never more than the set can hold.
+        let mut over = cap.clone();
+        over.push((TRAILER_KIND_ERC20, 0, &[]));
+        let over = build(&over);
+        assert!(parse_all(&over, 0, over.len(), 2).is_err());
     }
 
     #[test]

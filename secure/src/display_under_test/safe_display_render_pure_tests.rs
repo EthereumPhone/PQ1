@@ -151,7 +151,7 @@ pub(super) fn render_raw_with_context(
     let (bundle, cd) = build_raw_trailer(to, operation, raw);
     let verified = verify_and_bind_trailer(&bundle, &cd, CHAIN_ID, &SAFE_ADDR)
         .expect("test Safe trailer must verify+bind");
-    render_safe_v1_pages(&verified, cow, erc20, &NameResolver::new())
+    render_safe_v1_pages(&verified, cow, crate::erc20::set::Erc20Scope::from(erc20), &NameResolver::new())
 }
 
 pub(super) fn erc20_approve(spender: [u8; 20], amount_or_token_id: u64) -> [u8; 68] {
@@ -225,7 +225,7 @@ fn positive_safe_erc20_inner_binds_amount_recipient_and_safe_address() {
         .expect("trailer must verify+bind");
     let meta = usdc_meta();
     let resolver = NameResolver::new();
-    let pages = render_safe_v1_pages(&v, None, Some(&meta), &resolver).expect("render");
+    let pages = render_safe_v1_pages(&v, None, crate::erc20::set::Erc20Scope::from(Some(&meta)), &resolver).expect("render");
 
     let text = all_text(&pages);
     let hex = all_hex(&pages);
@@ -297,7 +297,7 @@ fn positive_safe_golden_grid_hash() {
     let v = verify_and_bind_trailer(&bundle, &cd, CHAIN_ID, &SAFE_ADDR).expect("bind");
     let meta = usdc_meta();
     let resolver = NameResolver::new();
-    let pages = render_safe_v1_pages(&v, None, Some(&meta), &resolver).expect("render");
+    let pages = render_safe_v1_pages(&v, None, crate::erc20::set::Erc20Scope::from(Some(&meta)), &resolver).expect("render");
     let h = super::golden_grid_hash(&pages);
 
     // Non-vacuity: a different inner amount MUST change the digest, proving
@@ -305,7 +305,7 @@ fn positive_safe_golden_grid_hash() {
     let (b2, cd2) = build_trailer(recipient, 999_000_000);
     let v2 = verify_and_bind_trailer(&b2, &cd2, CHAIN_ID, &SAFE_ADDR).expect("bind");
     let h2 = super::golden_grid_hash(
-        &render_safe_v1_pages(&v2, None, Some(&meta), &resolver).expect("render"),
+        &render_safe_v1_pages(&v2, None, crate::erc20::set::Erc20Scope::from(Some(&meta)), &resolver).expect("render"),
     );
     assert_ne!(
         h, h2,
@@ -335,7 +335,7 @@ fn negative_safe_erc20_amount_nonvacuous() {
         let v = verify_and_bind_trailer(&bundle, &cd, CHAIN_ID, &SAFE_ADDR).expect("verify");
         let meta = usdc_meta();
         let resolver = NameResolver::new();
-        let pages = render_safe_v1_pages(&v, None, Some(&meta), &resolver).expect("render");
+        let pages = render_safe_v1_pages(&v, None, crate::erc20::set::Erc20Scope::from(Some(&meta)), &resolver).expect("render");
         all_text(&pages)
     };
     let t250 = render_amount(250_000_000); // 250 USDC
@@ -584,9 +584,11 @@ fn safe_known_call_fi_source_has_ab_route_proof_and_two_final_gates() {
 
     assert!(SOURCE.contains("let mut selector = [0u8; 4];"));
     assert!(SOURCE.contains("selector[..n].copy_from_slice(&data[..n]);"));
-    assert!(SOURCE.contains("meta.chain_id == chain_id"));
-    assert!(SOURCE.contains("meta.contract == *target"));
-    assert!(SOURCE.contains("parse_erc20_calldata(data).is_some()"));
+    // Keyed by exactly (chain, target): a Safe batch may carry one
+    // metadata entry per token (CAP_ERC20_BUNDLE_SET).
+    assert!(SOURCE.contains(
+        "erc20.lookup_exact(chain_id, target).is_some() && parse_erc20_calldata(data).is_some()"
+    ));
     assert!(SOURCE.contains("summary.presign_claims == 1"));
     assert!(SOURCE.contains("summary.presign_idx == seen"));
     assert!(SOURCE.contains("safe_inner_is_cow_presign(&record.to, record.data)"));

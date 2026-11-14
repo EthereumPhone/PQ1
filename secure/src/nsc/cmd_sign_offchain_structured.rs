@@ -229,12 +229,37 @@ pub(super) unsafe fn confirm(
                 }
             };
             // ── Evidence for the inner call ──
-            let erc20 = if frame.erc20.is_empty() {
-                None
-            } else {
-                crate::erc20::bundle::verify_erc20_bundle(frame.erc20)
+            // The primary ERC-20 slot plus the optional set tail
+            // (CAP_ERC20_BUNDLE_SET): one entry per token the SafeTx names
+            // (inner call, multiSend records, refund gasToken).
+            let erc20_set = match crate::erc20::set::build_erc20_set(
+                frame.erc20,
+                frame.erc20_set,
+                chain_id,
+                crate::erc20::set::DupPolicy::Refuse,
+            ) {
+                Ok(set) => set,
+                Err(_) => {
+                    crate::ui::show_status("Safe sign", "bad erc20 set");
+                    return Err(NscStatus::InvalidPointer as u32);
+                }
             };
-            let meta = crate::tx::display::safe_route_meta(chain_id, Some(&verified), None, erc20.as_ref());
+            if !crate::erc20::set::erc20_set_proven(
+                frame.erc20,
+                frame.erc20_set,
+                chain_id,
+                crate::erc20::set::DupPolicy::Refuse,
+                &erc20_set,
+            ) {
+                crate::ui::show_status("Safe sign", "erc20 set proof");
+                return Err(NscStatus::InvalidPointer as u32);
+            }
+            let meta = crate::tx::display::safe_route_meta(
+                chain_id,
+                Some(&verified),
+                None,
+                erc20_set.scope_all(),
+            );
             let wallet_addr = wallet_address(account_index, entropy);
             let bind = crate::tx::eip712::safe::resolve_cow_binding(&[], &wallet_addr, Some(&verified), None);
             let cow = if bind.via_safe {

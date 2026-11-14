@@ -25,3 +25,6 @@ pub mod bundle {
         pqsigner_tx::erc20::bundle::verify_erc20_bundle(bundle, &ERC20_DB_ROOT)
     }
 }
+
+/// Several Merkle-proven ERC-20 bundles per request (`CAP_ERC20_BUNDLE_SET`).
+pub mod set;

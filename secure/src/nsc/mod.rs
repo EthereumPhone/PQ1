@@ -1381,7 +1381,7 @@ pub(super) fn px_confirm_safe(
     safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
     safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
     cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     resolver: &crate::names::NameResolver<'_>,
     facts: &crate::tx::display::TrailerFacts<'_>,
 ) -> Result<(crate::ui::confirm::ConfirmResult, u32), &'static str> {

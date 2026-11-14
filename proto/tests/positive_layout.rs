@@ -109,11 +109,12 @@ fn positive_device_capabilities_advertise_proof_set_without_reusing_retired_bit(
     assert_eq!(CAP_OFFCHAIN_COW_ORDER, 1 << 4);
     assert_eq!(CAP_SIGN_USEROP_DATA_8K, 1 << 5);
     assert_eq!(CAP_OFFCHAIN_PERMIT2, 1 << 6);
+    assert_eq!(CAP_ERC20_BUNDLE_SET, 1 << 7);
     assert_eq!(
         DEVICE_CAPABILITIES,
-        (1 << 0) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6)
+        (1 << 0) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7)
     );
-    assert_eq!(DEVICE_CAPABILITIES, 0x7D);
+    assert_eq!(DEVICE_CAPABILITIES, 0xFD);
     assert_eq!(DEVICE_CAPABILITIES & (1 << 1), 0, "bit 1 stays retired");
 }
 
@@ -299,8 +300,10 @@ fn positive_sign_offchain_max_input_bounds_personal_sign() {
             .max()
             .unwrap()
     );
-    assert_eq!(MAX_OFFCHAIN_SAFE_TX_LEN, 12_334);
-    assert_eq!(SIGN_OFFCHAIN_INPUT_MAX_LEN, 12_351);
+    // 2026-11-14: the ERC-20 set tail (CAP_ERC20_BUNDLE_SET) adds
+    // 2 + ERC20_SET_MAX_LEN to the SafeTx and EIP-712 kinds.
+    assert_eq!(MAX_OFFCHAIN_SAFE_TX_LEN, 12_334 + 2 + ERC20_SET_MAX_LEN);
+    assert_eq!(SIGN_OFFCHAIN_INPUT_MAX_LEN, 16_449);
     assert_eq!(MAX_OFFCHAIN_COW_ORDER_LEN, 2_448);
     assert_eq!(MIN_OFFCHAIN_SAFE_TX_LEN, 290);
     assert_eq!(MIN_OFFCHAIN_COW_ORDER_LEN, 208);
@@ -325,7 +328,21 @@ fn positive_sign_offchain_max_input_bounds_personal_sign() {
         MAX_OFFCHAIN_EIP712_TYPED_LEN,
         2 + 32 + 32 + 2 + MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN
             + 2 + ERC7730_LEGACY_BUNDLE_MAX_LEN
+            + 2 + ERC20_SET_MAX_LEN
     );
+}
+
+#[test]
+fn positive_erc20_set_envelope_constants() {
+    assert_eq!(ERC20_SET_MAGIC, 0xE020);
+    assert_eq!(ERC20_SET_VERSION, 1);
+    assert_eq!(ERC20_SET_HEADER_LEN, 4);
+    assert_eq!(ERC20_SET_MAX_EXTRA, 6);
+    assert_eq!(ERC20_SET_CAPACITY, 7);
+    assert_eq!(ERC20_SET_MAX_LEN, 4096);
+    assert_eq!(ERC20_BUNDLE_MAX_LEN, 1120);
+    // Slot 1 of CMD_SIGN_USEROP grew from 0 to ERC20_SET_MAX_LEN.
+    assert_eq!(SIGN_USEROP_MAX_PAYLOAD_LEN, 32_300 + ERC20_SET_MAX_LEN);
 }
 
 #[test]

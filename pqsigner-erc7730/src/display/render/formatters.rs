@@ -41,7 +41,9 @@ use crate::ir::{
     ContextKind, Erc7730Ir, FieldEntry, FormatHeader, FormatOp, PathOp, UNISWAP_ROUTER02_CHAIN_ID,
     UNISWAP_ROUTER02_MAINNET, UNISWAP_V3_EXACT_INPUT_SELECTOR, UNISWAP_V3_EXACT_OUTPUT_SELECTOR,
 };
+#[cfg(test)]
 use pqsigner_tx::erc20::bundle::Erc20Metadata;
+use pqsigner_tx::erc20::set::Erc20Scope;
 use pqsigner_tx::names::NameResolver;
 use pqsigner_tx_core::eip1559::U256;
 // `resolve_array` (the load-bearing dynamic-array tail resolver, which reuses
@@ -653,7 +655,7 @@ pub(super) fn dispatch(
     ir: &Erc7730Ir<'_>,
     body: &[u8],
     container: &ContractContainerCtx,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     params: &ParamSet<'_>,
 ) -> Result<Option<RenderedFieldWitness>, RenderErr> {
@@ -1184,7 +1186,7 @@ fn render_token_amount(
     ir: &Erc7730Ir<'_>,
     body: &[u8],
     container: &ContractContainerCtx,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     params: &ParamSet<'_>,
 ) -> Result<Option<RenderedFieldWitness>, RenderErr> {
@@ -1213,7 +1215,11 @@ fn render_token_amount(
     // threshold gate HOISTED ABOVE the bound match (review 4.5), the
     // validated `message` override (review 3.6), the M-4 raw fallback and
     // the MEDIUM-1 identity-page rule.
-    let decision = token_amount_decision(&raw, token_addr, erc20, container.chain_id, params);
+    // Several tokens may be bound in one request (CAP_ERC20_BUNDLE_SET): the
+    // metadata for THIS amount is the entry keyed by exactly the token address
+    // the signed data names on this chain, never "the" attached bundle.
+    let meta = token_addr.and_then(|a| erc20.lookup_exact(container.chain_id, &a));
+    let decision = token_amount_decision(&raw, token_addr, meta, container.chain_id, params);
 
     // Every `Bound` arm has an authenticated scale. Build its complete exact
     // text before any page or identity publication; semantic threshold arms
@@ -1273,7 +1279,7 @@ fn render_token_amount(
                 // summarize it. The witness reuses the painted bytes.
                 let metadata_chain_bound = !bound_non_native
                     || matches!(
-                            (token_addr, erc20),
+                            (token_addr, meta),
                             (Some(addr), Some(meta))
                                 if meta.chain_id == container.chain_id && meta.contract == addr
                     );
@@ -2727,7 +2733,7 @@ pub(super) fn render_dynamic_bytes(
     ir: &Erc7730Ir<'_>,
     full_body: &[u8],
     static_head_words: u16,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     params: &ParamSet<'_>,
 ) -> Result<(), RenderErr> {
@@ -2752,7 +2758,7 @@ pub(super) fn render_dynamic_bytes_with_mode(
     full_body: &[u8],
     static_head_words: u16,
     mode: ContractCalldataMode,
-    _erc20: Option<&Erc20Metadata<'_>>,
+    _erc20: Erc20Scope<'_, '_>,
     _resolver: &NameResolver<'_>,
     params: &ParamSet<'_>,
 ) -> Result<(), RenderErr> {
@@ -2886,7 +2892,7 @@ pub(super) fn render_array(
     full_body: &[u8],
     static_head_words: u16,
     container: &ContractContainerCtx,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     params: &ParamSet<'_>,
 ) -> Result<(), RenderErr> {
@@ -2913,7 +2919,7 @@ pub(super) fn render_array_with_mode(
     static_head_words: u16,
     mode: ContractCalldataMode,
     container: &ContractContainerCtx,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     params: &ParamSet<'_>,
 ) -> Result<(), RenderErr> {
@@ -2951,10 +2957,11 @@ pub(super) fn render_array_with_mode(
             } else {
                 None
             };
-            let b = match (token_addr, erc20) {
-                (Some(a), Some(m)) if a == m.contract => Some((u32::from(m.decimals), m.symbol, a)),
-                _ => None,
-            };
+            // Keyed lookup: chain-bound and contract-bound (the single-bundle
+            // version compared the contract only).
+            let b = token_addr
+                .and_then(|a| erc20.lookup_exact(container.chain_id, &a).map(|m| (m, a)))
+                .map(|(m, a)| (u32::from(m.decimals), m.symbol, a));
             (b, token_addr)
         } else {
             (None, None)
@@ -3348,7 +3355,7 @@ fn render_token_ticker(
     ir: &Erc7730Ir<'_>,
     body: &[u8],
     container: &ContractContainerCtx,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
     _params: &ParamSet<'_>,
 ) -> Result<(), RenderErr> {
@@ -3365,8 +3372,8 @@ fn render_token_ticker(
         Resolved::Slot32(b) => canonical_address_word(b)?,
         Resolved::Container(idx) => container_addr(container, idx)?,
     };
-    match erc20 {
-        Some(meta) if addr == meta.contract => {
+    match erc20.lookup_exact(container.chain_id, &addr) {
+        Some(meta) => {
             let [_, r1, _r2, foot] = pages.page_mut(p);
             write_line_bytes(r1, meta.symbol);
             write_line(foot, "> next");
@@ -4510,7 +4517,7 @@ mod faithless_formatter_fixed {
             &ir,
             &body,
             &tx,
-            None,
+            Erc20Scope::empty(),
             &resolver,
             &params,
         )
@@ -4552,7 +4559,7 @@ mod faithless_formatter_fixed {
             &ir,
             &body,
             &tx,
-            Some(&meta),
+            Erc20Scope::from(Some(&meta)),
             &resolver,
             &params,
         )
@@ -4587,7 +4594,7 @@ mod faithless_formatter_fixed {
                 &ir,
                 &body,
                 &tx,
-                Some(&meta),
+                Erc20Scope::from(Some(&meta)),
                 &resolver,
                 &params,
             )
@@ -4624,7 +4631,7 @@ mod faithless_formatter_fixed {
                 &ir,
                 &body,
                 &envelope_chain(1),
-                Some(&meta),
+                Erc20Scope::from(Some(&meta)),
                 &NameResolver::new(),
                 &ParamSet::default(),
             ),
@@ -4830,7 +4837,7 @@ mod encrypted_formatter_declines {
         };
         let mut pages = Pages::with_len(0);
         let r = dispatch(
-            &field, &mut pages, &ir, &body, &tx, None, &resolver, &params,
+            &field, &mut pages, &ir, &body, &tx, Erc20Scope::empty(), &resolver, &params,
         );
         assert!(
             r.is_err(),
@@ -5564,7 +5571,7 @@ mod token_amount_threshold_host_tests {
         let params = unlimited_params(&threshold);
         let f = field();
         let mut pages = Pages::with_len(0);
-        let r = render_token_amount(&f, &mut pages, &ir, &value, &tx, None, &resolver, &params);
+        let r = render_token_amount(&f, &mut pages, &ir, &value, &tx, Erc20Scope::empty(), &resolver, &params);
         assert!(r.is_ok());
         assert_eq!(pages.len, 1);
         assert_eq!(&pages.buf[0][1][..5], b"1 ETH");
@@ -5588,7 +5595,7 @@ mod token_amount_threshold_host_tests {
         let params = unlimited_params(&threshold);
         let f = field();
         let mut pages = Pages::with_len(0);
-        let r = render_token_amount(&f, &mut pages, &ir, &value, &tx, None, &resolver, &params);
+        let r = render_token_amount(&f, &mut pages, &ir, &value, &tx, Erc20Scope::empty(), &resolver, &params);
         assert!(r.is_ok());
         assert_ne!(&pages.buf[0][1][..10], b"unlimited ");
     }
@@ -6219,7 +6226,7 @@ mod adversarial_renderer_regressions {
     fn assert_array_high_precision_then_overwide_refuses(
         fmt: FormatOp,
         params: &ParamSet<'_>,
-        erc20: Option<&Erc20Metadata<'_>>,
+        erc20: Erc20Scope<'_, '_>,
         expected_exact_pages: usize,
     ) {
         let exact = word_from_u128(1_000_000_000_000_000_000);
@@ -6330,7 +6337,7 @@ mod adversarial_renderer_regressions {
             &ir(&SLOT_POOL),
             &exact,
             &tx(),
-            Some(&meta),
+            Erc20Scope::from(Some(&meta)),
             &NameResolver::new(),
             &params,
         )
@@ -6345,7 +6352,7 @@ mod adversarial_renderer_regressions {
             &ir(&SLOT_POOL),
             &high_precision,
             &tx(),
-            Some(&meta),
+            Erc20Scope::from(Some(&meta)),
             &NameResolver::new(),
             &params,
         )
@@ -6365,7 +6372,7 @@ mod adversarial_renderer_regressions {
                 &ir(&SLOT_POOL),
                 &exact_eighteen_decimal_overflow_word(),
                 &tx(),
-                Some(&meta),
+                Erc20Scope::from(Some(&meta)),
                 &NameResolver::new(),
                 &params,
             ),
@@ -6380,7 +6387,7 @@ mod adversarial_renderer_regressions {
         assert_array_high_precision_then_overwide_refuses(
             FormatOp::Amount,
             &ParamSet::default(),
-            None,
+            Erc20Scope::empty(),
             3,
         );
     }
@@ -6404,7 +6411,7 @@ mod adversarial_renderer_regressions {
             &canonical,
             1,
             &tx(),
-            None,
+            Erc20Scope::empty(),
             &NameResolver::new(),
             &params,
         )
@@ -6424,7 +6431,7 @@ mod adversarial_renderer_regressions {
                 &dirty,
                 1,
                 &tx(),
-                None,
+                Erc20Scope::empty(),
                 &NameResolver::new(),
                 &params,
             ),
@@ -6439,7 +6446,7 @@ mod adversarial_renderer_regressions {
         let mut params = ParamSet::default();
         params.decimals = Some(18);
         params.base = Some(b"shares");
-        assert_array_high_precision_then_overwide_refuses(FormatOp::Unit, &params, None, 3);
+        assert_array_high_precision_then_overwide_refuses(FormatOp::Unit, &params, Erc20Scope::empty(), 3);
     }
 
     #[test]
@@ -6451,7 +6458,7 @@ mod adversarial_renderer_regressions {
         assert_array_high_precision_then_overwide_refuses(
             FormatOp::TokenAmount,
             &params,
-            Some(&meta),
+            Erc20Scope::from(Some(&meta)),
             4,
         );
     }
@@ -6473,7 +6480,7 @@ mod adversarial_renderer_regressions {
             &ir(&SLOT_POOL),
             &inexact,
             &tx(),
-            None,
+            Erc20Scope::empty(),
             &NameResolver::new(),
             &raw_params,
         )
@@ -6489,7 +6496,7 @@ mod adversarial_renderer_regressions {
             &raw_array_body,
             1,
             &tx(),
-            None,
+            Erc20Scope::empty(),
             &NameResolver::new(),
             &raw_params,
         )
@@ -6511,7 +6518,7 @@ mod adversarial_renderer_regressions {
             &ir(&SLOT_POOL),
             &inexact,
             &tx(),
-            Some(&meta),
+            Erc20Scope::from(Some(&meta)),
             &NameResolver::new(),
             &unlimited_params,
         )
@@ -6551,7 +6558,7 @@ mod adversarial_renderer_regressions {
                 &ir(&SLOT_POOL),
                 &body,
                 &envelope,
-                Some(&meta),
+                Erc20Scope::from(Some(&meta)),
                 &resolver,
                 &params,
             ),
@@ -6581,7 +6588,7 @@ mod adversarial_renderer_regressions {
                 &ir(&SLOT_POOL),
                 &value,
                 &envelope,
-                Some(meta),
+                Erc20Scope::from(Some(meta)),
                 &NameResolver::new(),
                 &params,
             )
@@ -6613,7 +6620,7 @@ mod adversarial_renderer_regressions {
                 &ir(&SLOT_POOL),
                 &word_from_u128(1_000_000_000_000_000_000),
                 &tx(),
-                Some(&meta),
+                Erc20Scope::from(Some(&meta)),
                 &NameResolver::new(),
                 &params,
             ),
@@ -6639,7 +6646,7 @@ mod adversarial_renderer_regressions {
                 &ir(&SLOT_POOL),
                 &body,
                 &envelope,
-                None,
+                Erc20Scope::empty(),
                 &NameResolver::new(),
                 &params,
             ),
@@ -6672,7 +6679,7 @@ mod adversarial_renderer_regressions {
                 &ir(&SLOT_POOL),
                 &value,
                 &envelope,
-                Some(meta),
+                Erc20Scope::from(Some(meta)),
                 &resolver,
                 &params,
             )
@@ -6709,7 +6716,7 @@ mod adversarial_renderer_regressions {
             &ir(&SLOT_POOL),
             &value,
             &envelope,
-            Some(&meta),
+            Erc20Scope::from(Some(&meta)),
             &NameResolver::new(),
             &params,
         )
@@ -6745,7 +6752,7 @@ mod adversarial_renderer_regressions {
                 &body,
                 1,
                 &envelope,
-                Some(&meta),
+                Erc20Scope::from(Some(&meta)),
                 &resolver,
                 &params,
             ),
@@ -6778,7 +6785,7 @@ mod adversarial_renderer_regressions {
                 &body,
                 1,
                 &envelope,
-                Some(meta),
+                Erc20Scope::from(Some(meta)),
                 &NameResolver::new(),
                 &params,
             )
@@ -6816,7 +6823,7 @@ mod adversarial_renderer_regressions {
                 &body,
                 1,
                 &tx(),
-                Some(&meta),
+                Erc20Scope::from(Some(&meta)),
                 &NameResolver::new(),
                 &params,
             ),
@@ -6908,7 +6915,7 @@ mod adversarial_renderer_regressions {
                 &body,
                 2,
                 mode,
-                None,
+                Erc20Scope::empty(),
                 &resolver,
                 &params,
             )
@@ -6931,7 +6938,7 @@ mod adversarial_renderer_regressions {
             &changed,
             2,
             changed_mode,
-            None,
+            Erc20Scope::empty(),
             &resolver,
             &params,
         )
@@ -7100,7 +7107,7 @@ mod adversarial_renderer_regressions {
             &ir(&SLOT_POOL),
             &one_billion_word(),
             &envelope,
-            None,
+            Erc20Scope::empty(),
             &NameResolver::new(),
             &params,
         )
@@ -7193,7 +7200,7 @@ mod adversarial_renderer_regressions {
             &ir(&SLOT_POOL),
             &one_eth_one_wei,
             &tx(),
-            None,
+            Erc20Scope::empty(),
             &NameResolver::new(),
             &params,
         )
@@ -7217,7 +7224,7 @@ mod adversarial_renderer_regressions {
             &ir(&DYNAMIC_POOL),
             &dynamic_body(b"same prefix, attacker-controlled suffix"),
             1,
-            None,
+            Erc20Scope::empty(),
             &NameResolver::new(),
             &params,
         );
@@ -7240,7 +7247,7 @@ mod adversarial_renderer_regressions {
                 &ir(&DYNAMIC_POOL),
                 &body,
                 1,
-                None,
+                Erc20Scope::empty(),
                 &resolver,
                 &params,
             ),
@@ -7256,7 +7263,7 @@ mod adversarial_renderer_regressions {
                 &ir(&DYNAMIC_POOL),
                 &body,
                 1,
-                None,
+                Erc20Scope::empty(),
                 &resolver,
                 &params,
             ),
@@ -7276,7 +7283,7 @@ mod adversarial_renderer_regressions {
                 &ir(&DYNAMIC_POOL),
                 &dynamic_body(data),
                 1,
-                None,
+                Erc20Scope::empty(),
                 &NameResolver::new(),
                 &params,
             )
@@ -7465,7 +7472,7 @@ mod adversarial_renderer_regressions {
                 &ir,
                 &body,
                 &tx,
-                None,
+                Erc20Scope::empty(),
                 &resolver,
                 &ParamSet::default(),
             ),
@@ -7520,7 +7527,7 @@ mod adversarial_renderer_regressions {
                 &ir(&SLOT_POOL),
                 &[0u8; 32],
                 &tx(),
-                None,
+                Erc20Scope::empty(),
                 &resolver,
                 &params,
             ),
@@ -7533,7 +7540,7 @@ mod adversarial_renderer_regressions {
                 &ir(&SLOT_POOL),
                 &[],
                 &tx(),
-                None,
+                Erc20Scope::empty(),
                 &resolver,
                 &params,
             ),

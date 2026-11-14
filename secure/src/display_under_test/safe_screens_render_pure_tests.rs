@@ -90,9 +90,9 @@ fn both_with(
     let verified = verify_and_bind_trailer(&bundle, &cd, CHAIN_ID, &SAFE_ADDR)
         .expect("test Safe trailer must verify+bind");
     let resolver = NameResolver::new();
-    let pages = render_safe_v1_pages(&verified, cow, erc20, &resolver);
+    let pages = render_safe_v1_pages(&verified, cow, crate::erc20::set::Erc20Scope::from(erc20), &resolver);
     let mut screens = Screens::blank();
-    let receipt = emit_safe_v1(&mut screens, &verified, cow, erc20, &resolver);
+    let receipt = emit_safe_v1(&mut screens, &verified, cow, crate::erc20::set::Erc20Scope::from(erc20), &resolver);
     match (pages, receipt) {
         (Ok(pages), Ok(receipt)) => Ok(Both {
             pages,
@@ -674,7 +674,7 @@ fn lifted(fx: &TrailerFixture) -> Lifted {
     let (bundle, cd) = build_trailer_with(TOKEN, 0, &erc20_transfer(recipient(), 250_000_000), |_| {});
     let verified = verify_and_bind_trailer(&bundle, &cd, CHAIN_ID, &SAFE_ADDR).unwrap();
     let resolver = NameResolver::new();
-    let mut pages = render_safe_v1_pages(&verified, None, Some(&meta), &resolver).unwrap();
+    let mut pages = render_safe_v1_pages(&verified, None, crate::erc20::set::Erc20Scope::from(Some(&meta)), &resolver).unwrap();
     let body_len = pages.len;
     let facts = fx.facts();
     append_trailer_pages(&mut pages, &facts);
@@ -684,7 +684,7 @@ fn lifted(fx: &TrailerFixture) -> Lifted {
             safe_v1: Some(&verified),
             safe_exec: None,
             cow: None,
-            erc20: Some(&meta),
+            erc20: crate::erc20::set::Erc20Scope::from(Some(&meta)),
             resolver: &resolver,
         },
         trailers: &facts,
@@ -713,7 +713,7 @@ fn safe_body() -> px_lift::Body<'static> {
         safe_v1: None,
         safe_exec: None,
         cow: None,
-        erc20: None,
+        erc20: crate::erc20::set::Erc20Scope::empty(),
         resolver: RESOLVER.get_or_init(NameResolver::new),
     }
 }

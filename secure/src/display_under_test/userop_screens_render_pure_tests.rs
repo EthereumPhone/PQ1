@@ -250,7 +250,7 @@ fn lift_userop(
     let body = UserOpInputs {
         tx,
         inner_data: data,
-        erc20,
+        erc20: crate::erc20::set::Erc20Scope::from(erc20),
         selector,
         resolver,
     };
@@ -590,7 +590,7 @@ fn a_body_the_dispatcher_did_not_paint_is_refused() {
     let lying = UserOpInputs {
         tx: &t,
         inner_data: &[],
-        erc20: None,
+        erc20: crate::erc20::set::Erc20Scope::empty(),
         selector: None,
         resolver: &r,
     };

@@ -464,7 +464,7 @@ fn offchain_eip712_typed_screens() {
         &pth,
         &encoded,
         &verified,
-        None,
+        crate::erc20::set::Erc20Scope::empty(),
         &NameResolver::new(),
     )
     .expect("Ballot renders");
@@ -527,7 +527,7 @@ fn lift_safe_offchain(
     let (verified, h) =
         crate::tx::eip712::safe::verify_offchain_safe_tx(&bundle, 1).expect("SafeTx verifies off-chain");
     let r = NameResolver::new();
-    let mut pages = super::safe_display::render_safe_offchain_pages(&verified, cow, erc20, &r).expect("renders");
+    let mut pages = super::safe_display::render_safe_offchain_pages(&verified, cow, crate::erc20::set::Erc20Scope::from(erc20), &r).expect("renders");
     let t = crate::tx::eip1559::Eip1559Tx::default();
     let ctx = structured_context(4, 1);
     let facts = offchain_trailers(&mut pages, &t, &[0u8; 32], &WALLET, FpKind::SafeTxHash(h), None, Some(&ctx));
@@ -535,7 +535,7 @@ fn lift_safe_offchain(
         body: Body::SafeOffchain {
             safe: &verified,
             cow,
-            erc20,
+            erc20: crate::erc20::set::Erc20Scope::from(erc20),
             resolver: &r,
         },
         trailers: &facts,
@@ -660,7 +660,7 @@ fn lift_batch_member(index: usize, total: usize, amount: u64) -> Lifted {
     let body = Body::UserOp(UserOpInputs {
         tx: &t,
         inner_data: &data,
-        erc20: Some(&m),
+        erc20: crate::erc20::set::Erc20Scope::from(Some(&m)),
         selector: None,
         resolver: &r,
     });
@@ -741,7 +741,7 @@ fn batch_member_binding_rejects_the_wrong_position() {
     let body = Body::UserOp(UserOpInputs {
         tx: &t,
         inner_data: &data,
-        erc20: None,
+        erc20: crate::erc20::set::Erc20Scope::empty(),
         selector: None,
         resolver: &r,
     });

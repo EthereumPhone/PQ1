@@ -153,7 +153,7 @@ use crate::aa::userop::{
     AaUserOpParamsV06Sha256, ExecuteCallData, ENTRY_POINT_V06, MAX_EXECUTE_CALLDATA_LEN,
     SHA256_EMPTY,
 };
-use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata, MAX_ERC20_BUNDLE_LEN};
+use crate::erc20::bundle::MAX_ERC20_BUNDLE_LEN;
 use crate::names::{verify_name_bundle, NameResolver, MAX_NAME_BUNDLES, MAX_NAME_BUNDLE_LEN};
 use crate::selectors::{
     parse_self_attest_bundle, verify_selector_bundle, SelectorMeta, MAX_SELECTOR_BUNDLE_LEN,
@@ -172,7 +172,7 @@ use crate::ui;
 const SNAP_LEN: usize = SIGN_USEROP_HEADER_LEN
     + MAX_TX_LEN
     + 2 + MAX_ERC20_BUNDLE_LEN
-    + 2 // reserved compatibility length field; must be 0
+    + 2 + sphincs_tz_shared::ERC20_SET_MAX_LEN // extra ERC-20 bundles (CAP_ERC20_BUNDLE_SET)
     + 2 + COW_ORDER_TRAILER_MAX_LEN
     + 2 + SAFE_V1_PAYLOAD_MAX
     + 2 + MAX_SELECTOR_BUNDLE_LEN
@@ -513,21 +513,30 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     };
     cursor = erc20.next_cursor;
 
-    // Reserved compatibility slot. The 2-byte length field is kept for
-    // wire-offset stability of the trailers that follow. `max_len = 0`
-    // makes the read fail-closed: a non-zero declared length is rejected,
-    // and no payload bytes are ever parsed.
+    // Slot 1: extra ERC-20 bundles in an `ERC20_SET_MAGIC` envelope
+    // (`CAP_ERC20_BUNDLE_SET`). Formerly a reserved length-0 slot; the
+    // envelope's magic/version/exact framing is checked right here so a
+    // malformed set refuses before any other work.
     let reserved_v1 = match super::trailer::read_optional_u16_prefixed(
         snap,
         cursor,
         total_len,
-        0,
-        "reserved slot must be 0",
+        sphincs_tz_shared::ERC20_SET_MAX_LEN,
+        "bad erc20 set",
     ) {
         Ok(t) => t,
         Err(s) => return s,
     };
     cursor = reserved_v1.next_cursor;
+    if reserved_v1.len > 0
+        && crate::erc20::set::parse_erc20_set_envelope(
+            &snap[reserved_v1.start..reserved_v1.start + reserved_v1.len],
+        )
+        .is_err()
+    {
+        ui::show_status("Sign refused", "bad erc20 set");
+        return NscStatus::InvalidPointer as u32;
+    }
 
     // CoW order trailer: canonical(204) [|| sell_len(2) || sell_bundle
     // || buy_len(2) || buy_bundle]. Companion sends the whole trailer;
@@ -993,9 +1002,8 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // Computing it here would force the disjuncts to run before the Safe
     // verdicts exist.
 
-    // 7b. Reserved compatibility slot. Aave clear-signing flows through
-    // the native ERC-7730 verifier (§7c-quinquies / `erc7730_verified`).
-    // The wire slot is parsed as a zero-length field above (`reserved_v1`).
+    // 7b. Slot 1 carries the extra ERC-20 bundles; they join the primary
+    // slot in §7c-bis-erc20 below.
 
     // 7c. `safe_v1` Safe-multisig `approveHash` cross-check —
     // 8-step native pipeline (length → selector → calldata len →
@@ -1144,16 +1152,36 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // or a verified Safe direct/MultiSend target. Keeping that decision out of
     // raw trailer routing both closes RT-ERC20-01 and preserves legitimate
     // metadata for direct protocol calls such as `deposit(asset, amount)`.
-    let chain_verified_meta: Option<Erc20Metadata<'_>> = if erc20.len > 0 {
-        let bundle_slice = &snap[erc20.start..erc20.start + erc20.len];
-        match verify_erc20_bundle(bundle_slice) {
-            Some(meta) if meta.chain_id == chain_id => Some(meta),
-            None => None,
-            Some(_) => None,
+    //
+    // Several bundles may arrive (slot 0 + the slot-1 envelope): every
+    // renderer resolves the token it shows by the exact address the signed
+    // data names, so an entry nothing resolves to is never shown. A bad
+    // proof or a foreign chain drops that entry (as for slot 0 always);
+    // a duplicate, conflicting or overflowing entry refuses.
+    let erc20_slot0 = &snap[erc20.start..erc20.start + erc20.len];
+    let erc20_env = &snap[reserved_v1.start..reserved_v1.start + reserved_v1.len];
+    let erc20_set = match crate::erc20::set::build_erc20_set(
+        erc20_slot0,
+        erc20_env,
+        chain_id,
+        crate::erc20::set::DupPolicy::Refuse,
+    ) {
+        Ok(set) => set,
+        Err(_) => {
+            ui::show_status("Sign refused", "bad erc20 set");
+            return NscStatus::InvalidPointer as u32;
         }
-    } else {
-        None
     };
+    if !crate::erc20::set::erc20_set_proven(
+        erc20_slot0,
+        erc20_env,
+        chain_id,
+        crate::erc20::set::DupPolicy::Refuse,
+        &erc20_set,
+    ) {
+        ui::show_status("Sign refused", "erc20 set proof");
+        return NscStatus::InternalError as u32;
+    }
 
     // 7c-ter. Native CoW EIP-712 pipeline: canonical decode, chain/shape
     // checks, orderUid cross-check, and optional Merkle-verified token
@@ -1698,7 +1726,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         safe_exec_verified.as_ref(),
         erc7730_verified.as_ref(),
         erc7730_nested_binding.as_ref(),
-        chain_verified_meta.as_ref(),
+        erc20_set.scope_all(),
         selector_verified.as_ref(),
         &resolver,
         &mut dispatch_page_proofs,
@@ -2080,7 +2108,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         safe_v1_verified.as_ref(),
         safe_exec_verified.as_ref(),
         cow_order_verified.as_ref(),
-        chain_verified_meta.as_ref(),
+        erc20_set.scope_all(),
         &resolver,
         &px_trailer_facts,
         &tx_for_display,
@@ -3168,7 +3196,7 @@ fn px_route_confirm(
     safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
     safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
     cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     resolver: &crate::names::NameResolver<'_>,
     facts: &crate::tx::display::TrailerFacts<'_>,
     tx: &crate::tx::eip1559::Eip1559Tx,
@@ -3235,7 +3263,7 @@ fn px_route_confirm(
     _safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
     _safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
     _cow: Option<&crate::tx::eip712::cowswap::VerifiedCowswapV3>,
-    _erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    _erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     _resolver: &crate::names::NameResolver<'_>,
     _facts: &crate::tx::display::TrailerFacts<'_>,
     _tx: &crate::tx::eip1559::Eip1559Tx,

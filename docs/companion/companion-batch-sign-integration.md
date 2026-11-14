@@ -118,7 +118,7 @@ one `NameResolver` shared across renders.
 
 | `kind` | symbol | max bytes | verifier | applies to |
 |-------:|--------|----------:|----------|------------|
-| 1 | `TRAILER_KIND_ERC20`         | 1120 | `erc20::bundle::verify_erc20_bundle` (`ERC20_DB_ROOT`) | inner tx at `tx_idx` |
+| 1 | `TRAILER_KIND_ERC20`         | 1120 | `erc20::bundle::verify_erc20_bundle` (`ERC20_DB_ROOT`) | batch-wide since 2026-11-14 (bit 7): up to 7 records, `tx_idx` a valid member index used only as a hint; identical duplicates coalesce, two different bundles for one token refuse; every member resolves by exact `(chain, address)` |
 | 2 | `TRAILER_KIND_RESERVED_V1`   |    0 | reserved compatibility value; every record is rejected  | none; never emit |
 | 3 | `TRAILER_KIND_COW_ORDER`         | 2448 | `tx::eip712::cowswap::verify_and_bind_trailer`         | inner tx at `tx_idx` |
 | 4 | `TRAILER_KIND_SAFE_V1`       | 4379 | `tx::eip712::safe::verify_and_bind_trailer`            | inner tx at `tx_idx` |
@@ -132,6 +132,7 @@ The firmware refuses at parse time:
 * `trailer_count > MAX_TRAILERS_PER_BATCH (32)`.
 * `kind == 0 || kind > 8`.
 * `kind ∈ 1..=7` with `tx_idx >= batch_count` (out-of-range routing).
+* more than 7 `TRAILER_KIND_ERC20` records (`erc20 >cap`; firmware without capability bit 7 allows one per `tx_idx`).
 * `kind == 8` with `tx_idx != 0xff` (name bundle must be batch-wide).
 * duplicate `(kind, tx_idx)` for kinds 1..=7.
 * both `TRAILER_KIND_SEL_CURATED` and `TRAILER_KIND_SEL_SELFATTEST`

@@ -35,7 +35,7 @@ pub(super) fn render_contract_pass_into<'ir>(
     tx: &crate::tx::eip1559::Eip1559Tx,
     inner_data: &[u8],
     descriptor: &'ir crate::tx::erc7730::VerifiedDescriptor<'ir>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     resolver: &crate::names::NameResolver<'_>,
     device_signer: &[u8; 20],
     pages: &mut super::Pages,
@@ -60,7 +60,7 @@ pub(super) fn render_contract_proof_set_pass_into<'ir>(
     tx: &crate::tx::eip1559::Eip1559Tx,
     inner_data: &[u8],
     set: &crate::tx::erc7730::VerifiedProofSet<'ir>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     resolver: &crate::names::NameResolver<'_>,
     device_signer: &[u8; 20],
     expected_nested: Option<&crate::tx::erc7730::NestedCallBinding>,
@@ -210,7 +210,7 @@ fn render_pass<'ir>(
     primary_type_hash: &[u8; 32],
     encoded_data: &[u8],
     descriptor: &'ir crate::tx::erc7730::VerifiedDescriptor<'ir>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     resolver: &crate::names::NameResolver<'_>,
     pages: &mut super::Pages,
 ) -> Result<ContractTranscriptReceipt, crate::tx::erc7730_render::RenderErr> {
@@ -248,7 +248,7 @@ fn render_checked_two_pass<'ir>(
     primary_type_hash: &[u8; 32],
     encoded_data: &[u8],
     descriptor: &'ir crate::tx::erc7730::VerifiedDescriptor<'ir>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     resolver: &crate::names::NameResolver<'_>,
 ) -> Result<(super::Pages, Eip712TranscriptProof), crate::tx::erc7730_render::RenderErr> {
     use crate::tx::erc7730_render::RenderErr;
@@ -311,7 +311,7 @@ pub(crate) fn render_erc7730_eip712_pages_checked<'ir>(
     primary_type_hash: &[u8; 32],
     encoded_data: &[u8],
     descriptor: &'ir crate::tx::erc7730::VerifiedDescriptor<'ir>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     resolver: &crate::names::NameResolver<'_>,
 ) -> Result<(super::Pages, Eip712TranscriptProof), crate::tx::erc7730_render::RenderErr> {
     render_checked_two_pass(
@@ -334,7 +334,7 @@ pub(crate) fn render_erc7730_eip712_pages_v3_checked<'ir>(
     encoded_data: &[u8],
     nested_blob: &[u8],
     descriptor: &'ir crate::tx::erc7730::VerifiedDescriptor<'ir>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     resolver: &crate::names::NameResolver<'_>,
 ) -> Result<(super::Pages, Eip712TranscriptProof), crate::tx::erc7730_render::RenderErr> {
     render_checked_two_pass(

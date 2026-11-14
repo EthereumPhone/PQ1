@@ -86,6 +86,7 @@ use super::safe_mgmt::{
 };
 use super::Pages;
 use crate::erc20::bundle::Erc20Metadata;
+use crate::erc20::set::Erc20Scope;
 use crate::erc20::calldata::{is_unlimited_amount, parse_erc20_calldata, Erc20Call};
 use crate::names::NameResolver;
 use crate::tx::eip1559::U256;
@@ -160,13 +161,11 @@ fn exact_erc20_call_is_pinned(
     chain_id: u64,
     target: &[u8; 20],
     data: &[u8],
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
 ) -> bool {
-    erc20.is_some_and(|meta| {
-        meta.chain_id == chain_id
-            && meta.contract == *target
-            && parse_erc20_calldata(data).is_some()
-    })
+    // Keyed: metadata for exactly this target on this chain (a Safe batch
+    // may carry one entry per token).
+    erc20.lookup_exact(chain_id, target).is_some() && parse_erc20_calldata(data).is_some()
 }
 
 /// One complete route + exact-tuple pass over the Safe inner surface.
@@ -183,7 +182,7 @@ fn exact_erc20_call_is_pinned(
 fn safe_inner_calls_unknown_once(
     input: &SafeRenderInput<'_>,
     cow: Option<&VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
 ) -> bool {
     match multi_send::multisend_verdict(input.operation, &input.to, input.raw_data) {
         multi_send::MsVerdict::NotMultiSend => {
@@ -256,7 +255,7 @@ fn safe_inner_calls_unknown_once(
 fn prove_safe_inner_calls_unknown(
     input: &SafeRenderInput<'_>,
     cow: Option<&VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     verdict_out: &mut u32,
     cfi: &mut crate::fi::CfiCounter,
 ) {
@@ -311,7 +310,7 @@ fn erc20_call_amount_is_exactly_renderable(call: &Erc20Call, meta: &Erc20Metadat
 /// a lossy marker.
 fn legacy_values_are_exactly_renderable(
     input: &SafeRenderInput<'_>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
 ) -> bool {
     if !all_zero(&input.safe_tx_gas) {
         let (units, overflow) = u64_be_tail(&input.safe_tx_gas);
@@ -332,7 +331,7 @@ fn legacy_values_are_exactly_renderable(
     // native policy; token refunds use address-matched authenticated metadata.
     if refund_is_active(&input.gas_price, &input.gas_token, &input.refund_receiver) {
         let native_refund = all_zero(&input.gas_token);
-        let token_meta = erc20.filter(|meta| meta.contract == input.gas_token);
+        let token_meta = erc20.lookup_exact(input.chain_id, &input.gas_token);
         if native_refund || token_meta.is_some() {
             let (base_gas, base_overflow) = u64_be_tail(&input.base_gas);
             let Some(gas_units) = base_gas.checked_add(GAS_USED_CEILING) else {
@@ -377,7 +376,7 @@ fn legacy_values_are_exactly_renderable(
             {
                 return false;
             }
-            let Some(meta) = erc20.filter(|meta| meta.contract == record.to) else {
+            let Some(meta) = erc20.lookup_exact(input.chain_id, &record.to) else {
                 continue;
             };
             if let Some(call) = parse_erc20_calldata(record.data) {
@@ -389,7 +388,7 @@ fn legacy_values_are_exactly_renderable(
         return true;
     }
 
-    let Some(meta) = erc20.filter(|meta| meta.contract == input.to) else {
+    let Some(meta) = erc20.lookup_exact(input.chain_id, &input.to) else {
         return true;
     };
     parse_erc20_calldata(input.raw_data)
@@ -516,7 +515,7 @@ pub(super) struct SafeRenderInput<'a> {
 pub fn render_safe_v1_pages(
     safe: &VerifiedSafeV1<'_>,
     cow: Option<&VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
 ) -> Result<Pages, ()> {
     // The verifier already proved the canonical decodes; mirror that
@@ -565,7 +564,7 @@ pub fn render_safe_v1_pages(
 pub fn render_safe_offchain_pages(
     safe: &VerifiedSafeV1<'_>,
     cow: Option<&VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
 ) -> Result<Pages, ()> {
     let tx = decode_canonical(&safe.canonical).map_err(|_| ())?;
@@ -607,7 +606,7 @@ pub fn render_safe_offchain_pages(
 pub fn render_safe_exec_pages(
     exec: &VerifiedSafeExec<'_>,
     cow: Option<&VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
 ) -> Result<Pages, ()> {
     let d = &exec.decoded;
@@ -645,7 +644,7 @@ pub fn render_safe_exec_pages(
 fn render_safe_pages_inner(
     input: &SafeRenderInput<'_>,
     cow: Option<&VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
 ) -> Result<Pages, ()> {
     // Local field aliases to keep the existing rendering body readable.
@@ -815,7 +814,7 @@ fn render_safe_pages_inner(
                 // loud banner rather than dropping the high-order digits.
                 let fit = if input.gas_token.iter().all(|&b| b == 0) {
                     write_native_derived_amount_two_rows(r1, r2, &worst, tx.chain_id)
-                } else if let Some(m) = erc20.filter(|m| m.contract == input.gas_token) {
+                } else if let Some(m) = erc20.lookup_exact(input.chain_id, &input.gas_token) {
                     write_token_amount_two_rows(r1, r2, &worst, m)
                 } else {
                     let units = Erc20Metadata {
@@ -914,7 +913,9 @@ fn render_safe_pages_inner(
                 value: inner_value,
                 data: safe.raw_data,
                 data_hash: tx.data_hash,
-                erc20,
+                // Only the entry for THIS inner target: a refund-token entry
+                // must never label the inner call.
+                erc20: erc20.lookup_exact(tx.chain_id, &tx.to),
                 resolver,
             };
             next_page = append_inner_kind_pages(&mut pages, next_page, kind, &ctx);
@@ -975,7 +976,7 @@ pub(super) struct SafeSemantics<'a> {
 pub(super) fn classify<'a>(
     input: &SafeRenderInput<'_>,
     cow: Option<&'a VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
 ) -> Result<SafeSemantics<'a>, ()> {
     let legacy_amounts_exact = crate::fi::check_true_into_sentinel(|| {
         core::hint::black_box(legacy_values_are_exactly_renderable(input, erc20))
@@ -1112,7 +1113,9 @@ pub(super) fn classify<'a>(
                     }
                 } else {
                     match classify_inner(input.raw_data, &inner_value) {
-                        InnerKind::Erc20Known(call) if erc20.is_some() => {
+                        InnerKind::Erc20Known(call)
+                            if erc20.lookup_exact(input.chain_id, &input.to).is_some() =>
+                        {
                             InnerKind::Erc20Known(call)
                         }
                         InnerKind::Erc20Known(call) => InnerKind::Erc20Unknown(call),
@@ -1404,7 +1407,7 @@ mod inner_kind_hint_tests {
         let resolver = NameResolver::new();
         let known = render_input(WETH, 0, &WETH_DEPOSIT);
         assert!(
-            render_safe_pages_inner(&known, None, None, &resolver).is_err(),
+            render_safe_pages_inner(&known, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_err(),
             "Safe wrapper must not bypass the known WETH deposit proof requirement"
         );
 
@@ -1412,7 +1415,7 @@ mod inner_kind_hint_tests {
         // the loud opaque Safe review available.
         let unknown_data = [0xde, 0xad, 0xbe, 0xef];
         let unknown = render_input(WETH, 0, &unknown_data);
-        assert!(render_safe_pages_inner(&unknown, None, None, &resolver).is_ok());
+        assert!(render_safe_pages_inner(&unknown, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_ok());
     }
 
     #[test]
@@ -1422,14 +1425,14 @@ mod inner_kind_hint_tests {
 
         let mut exact = render_input(WETH, 0, &unknown_data);
         exact.safe_tx_gas[24..].copy_from_slice(&999_999_999u64.to_be_bytes());
-        assert!(legacy_values_are_exactly_renderable(&exact, None));
-        assert!(render_safe_pages_inner(&exact, None, None, &resolver).is_ok());
+        assert!(legacy_values_are_exactly_renderable(&exact, crate::erc20::set::Erc20Scope::empty()));
+        assert!(render_safe_pages_inner(&exact, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_ok());
 
         let mut lossy = render_input(WETH, 0, &unknown_data);
         lossy.safe_tx_gas[24..].copy_from_slice(&1_000_000_000u64.to_be_bytes());
-        assert!(!legacy_values_are_exactly_renderable(&lossy, None));
+        assert!(!legacy_values_are_exactly_renderable(&lossy, crate::erc20::set::Erc20Scope::empty()));
         assert!(
-            render_safe_pages_inner(&lossy, None, None, &resolver).is_err(),
+            render_safe_pages_inner(&lossy, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_err(),
             "distinct signed SafeTx gas values must not collapse to the same !OVF page"
         );
     }
@@ -1442,22 +1445,22 @@ mod inner_kind_hint_tests {
         for raw_data in [&[][..], &unknown_data[..]] {
             let mut exact = render_input([0x44; 20], 0, raw_data);
             exact.value = be_u128(1_000_000_000_000_000_000);
-            assert!(legacy_values_are_exactly_renderable(&exact, None));
+            assert!(legacy_values_are_exactly_renderable(&exact, crate::erc20::set::Erc20Scope::empty()));
             let exact_pages =
-                render_safe_pages_inner(&exact, None, None, &resolver).expect("1 ETH is exact");
+                render_safe_pages_inner(&exact, None, crate::erc20::set::Erc20Scope::empty(), &resolver).expect("1 ETH is exact");
 
             let mut one_wei = render_input([0x44; 20], 0, raw_data);
             one_wei.value = be_u128(1);
-            assert!(legacy_values_are_exactly_renderable(&one_wei, None));
-            let one_wei_pages = render_safe_pages_inner(&one_wei, None, None, &resolver)
+            assert!(legacy_values_are_exactly_renderable(&one_wei, crate::erc20::set::Erc20Scope::empty()));
+            let one_wei_pages = render_safe_pages_inner(&one_wei, None, crate::erc20::set::Erc20Scope::empty(), &resolver)
                 .expect("1 wei is the exact wrapped decimal");
             assert!(pages_contain(&one_wei_pages, b"0.0000000000000>"));
             assert!(!pages_contain(&one_wei_pages, b"wei"));
 
             let mut adjacent = render_input([0x44; 20], 0, raw_data);
             adjacent.value = be_u128(1_000_000_000_000_000_001);
-            assert!(legacy_values_are_exactly_renderable(&adjacent, None));
-            let adjacent_pages = render_safe_pages_inner(&adjacent, None, None, &resolver)
+            assert!(legacy_values_are_exactly_renderable(&adjacent, crate::erc20::set::Erc20Scope::empty()));
+            let adjacent_pages = render_safe_pages_inner(&adjacent, None, crate::erc20::set::Erc20Scope::empty(), &resolver)
                 .expect("1 ETH + 1 wei is the exact wrapped decimal");
             assert!(pages_contain(&adjacent_pages, b"1.0000000000000>"));
             assert!(!pages_contain(&adjacent_pages, b"wei"));
@@ -1467,16 +1470,16 @@ mod inner_kind_hint_tests {
 
             let mut next_exact = render_input([0x44; 20], 0, raw_data);
             next_exact.value = be_u128(1_000_001_000_000_000_000);
-            assert!(legacy_values_are_exactly_renderable(&next_exact, None));
-            let next_pages = render_safe_pages_inner(&next_exact, None, None, &resolver)
+            assert!(legacy_values_are_exactly_renderable(&next_exact, crate::erc20::set::Erc20Scope::empty()));
+            let next_pages = render_safe_pages_inner(&next_exact, None, crate::erc20::set::Erc20Scope::empty(), &resolver)
                 .expect("the next exact six-decimal step remains available");
             assert_ne!(exact_pages.buf, next_pages.buf);
 
             let mut overwide = render_input([0x44; 20], 0, raw_data);
             overwide.value = [0xff; 32];
-            assert!(!legacy_values_are_exactly_renderable(&overwide, None));
+            assert!(!legacy_values_are_exactly_renderable(&overwide, crate::erc20::set::Erc20Scope::empty()));
             assert!(
-                render_safe_pages_inner(&overwide, None, None, &resolver).is_err(),
+                render_safe_pages_inner(&overwide, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_err(),
                 "an overwide native value must refuse before any Safe pages escape"
             );
         }
@@ -1489,21 +1492,21 @@ mod inner_kind_hint_tests {
 
         let mut exact = render_input([0x44; 20], 0, &unknown_data);
         exact.gas_price = be_u128(100_000);
-        assert!(legacy_values_are_exactly_renderable(&exact, None));
+        assert!(legacy_values_are_exactly_renderable(&exact, crate::erc20::set::Erc20Scope::empty()));
         let exact_pages =
-            render_safe_pages_inner(&exact, None, None, &resolver).expect("3e12 wei is exact");
+            render_safe_pages_inner(&exact, None, crate::erc20::set::Erc20Scope::empty(), &resolver).expect("3e12 wei is exact");
 
         let mut adjacent = render_input([0x44; 20], 0, &unknown_data);
         adjacent.gas_price = be_u128(100_001);
-        assert!(legacy_values_are_exactly_renderable(&adjacent, None));
-        let adjacent_pages = render_safe_pages_inner(&adjacent, None, None, &resolver)
+        assert!(legacy_values_are_exactly_renderable(&adjacent, crate::erc20::set::Erc20Scope::empty()));
+        let adjacent_pages = render_safe_pages_inner(&adjacent, None, crate::erc20::set::Erc20Scope::empty(), &resolver)
             .expect("the derived bound may widen to remain exact");
         assert_ne!(exact_pages.buf, adjacent_pages.buf);
 
         let mut next_exact = render_input([0x44; 20], 0, &unknown_data);
         next_exact.gas_price = be_u128(200_000);
-        assert!(legacy_values_are_exactly_renderable(&next_exact, None));
-        let next_pages = render_safe_pages_inner(&next_exact, None, None, &resolver)
+        assert!(legacy_values_are_exactly_renderable(&next_exact, crate::erc20::set::Erc20Scope::empty()));
+        let next_pages = render_safe_pages_inner(&next_exact, None, crate::erc20::set::Erc20Scope::empty(), &resolver)
             .expect("the next exact native refund bound remains available");
         assert_ne!(exact_pages.buf, next_pages.buf);
 
@@ -1514,15 +1517,15 @@ mod inner_kind_hint_tests {
         let mut ordinary = render_input([0x44; 20], 0, &unknown_data);
         ordinary.base_gas = be_u128(43_776);
         ordinary.gas_price = be_u128(1_000_000_000);
-        assert!(legacy_values_are_exactly_renderable(&ordinary, None));
-        let ordinary_pages = render_safe_pages_inner(&ordinary, None, None, &resolver)
+        assert!(legacy_values_are_exactly_renderable(&ordinary, crate::erc20::set::Erc20Scope::empty()));
+        let ordinary_pages = render_safe_pages_inner(&ordinary, None, crate::erc20::set::Erc20Scope::empty(), &resolver)
             .expect("ordinary nonzero-baseGas refund remains available");
 
         let mut dusty = render_input([0x44; 20], 0, &unknown_data);
         dusty.base_gas = be_u128(43_776);
         dusty.gas_price = be_u128(1_000_000_001);
-        assert!(legacy_values_are_exactly_renderable(&dusty, None));
-        let dusty_pages = render_safe_pages_inner(&dusty, None, None, &resolver)
+        assert!(legacy_values_are_exactly_renderable(&dusty, crate::erc20::set::Erc20Scope::empty()));
+        let dusty_pages = render_safe_pages_inner(&dusty, None, crate::erc20::set::Erc20Scope::empty(), &resolver)
             .expect("raw-wei fallback keeps an adjacent refund bound exact");
         assert_ne!(ordinary_pages.buf, dusty_pages.buf);
 
@@ -1532,18 +1535,18 @@ mod inner_kind_hint_tests {
         // " raw"`). Until 2026-11-14 an unmarked cut held 28 and could show
         // row 2 as `000000000000 raw`.
         raw_fit.gas_price = be_u128(100_000_000_000_000_000);
-        assert!(legacy_values_are_exactly_renderable(&raw_fit, None));
+        assert!(legacy_values_are_exactly_renderable(&raw_fit, crate::erc20::set::Erc20Scope::empty()));
         assert!(
-            render_safe_pages_inner(&raw_fit, None, None, &resolver).is_ok(),
+            render_safe_pages_inner(&raw_fit, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_ok(),
             "a 25-digit unknown-chain raw refund bound must fit"
         );
 
         let mut raw_wide = render_input([0x44; 20], 0, &unknown_data);
         raw_wide.chain_id = 4_242_424_242;
         raw_wide.gas_price = be_u128(1_000_000_000_000_000_000_000);
-        assert!(!legacy_values_are_exactly_renderable(&raw_wide, None));
+        assert!(!legacy_values_are_exactly_renderable(&raw_wide, crate::erc20::set::Erc20Scope::empty()));
         assert!(
-            render_safe_pages_inner(&raw_wide, None, None, &resolver).is_err(),
+            render_safe_pages_inner(&raw_wide, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_err(),
             "a 29-digit unknown-chain raw refund bound must refuse"
         );
     }
@@ -1561,15 +1564,15 @@ mod inner_kind_hint_tests {
             let exact_packed = pack_record(0, &[0x44; 20], &exact_value, record_data);
             let exact_calldata = encode_multisend(&exact_packed);
             let exact = render_input(multisend, 1, &exact_calldata);
-            assert!(legacy_values_are_exactly_renderable(&exact, None));
-            let exact_pages = render_safe_pages_inner(&exact, None, None, &resolver)
+            assert!(legacy_values_are_exactly_renderable(&exact, crate::erc20::set::Erc20Scope::empty()));
+            let exact_pages = render_safe_pages_inner(&exact, None, crate::erc20::set::Erc20Scope::empty(), &resolver)
                 .expect("exact record values remain available");
 
             let adjacent_packed = pack_record(0, &[0x44; 20], &adjacent_value, record_data);
             let adjacent_calldata = encode_multisend(&adjacent_packed);
             let adjacent = render_input(multisend, 1, &adjacent_calldata);
-            assert!(legacy_values_are_exactly_renderable(&adjacent, None));
-            let adjacent_pages = render_safe_pages_inner(&adjacent, None, None, &resolver)
+            assert!(legacy_values_are_exactly_renderable(&adjacent, crate::erc20::set::Erc20Scope::empty()));
+            let adjacent_pages = render_safe_pages_inner(&adjacent, None, crate::erc20::set::Erc20Scope::empty(), &resolver)
                 .expect("record values share the exact wrapped decimal");
             assert!(pages_contain(&adjacent_pages, b"1.0000000000000>"));
             assert!(!pages_contain(&adjacent_pages, b"wei"));
@@ -1580,9 +1583,9 @@ mod inner_kind_hint_tests {
         let overwide_packed = pack_record(0, &[0x44; 20], &overwide_value, &[]);
         let overwide_calldata = encode_multisend(&overwide_packed);
         let overwide = render_input(multisend, 1, &overwide_calldata);
-        assert!(!legacy_values_are_exactly_renderable(&overwide, None));
+        assert!(!legacy_values_are_exactly_renderable(&overwide, crate::erc20::set::Erc20Scope::empty()));
         assert!(
-            render_safe_pages_inner(&overwide, None, None, &resolver).is_err(),
+            render_safe_pages_inner(&overwide, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_err(),
             "an overwide record value must refuse the entire Safe batch"
         );
     }
@@ -1598,17 +1601,17 @@ mod inner_kind_hint_tests {
         let one_calldata = encode_multisend(&one_packed);
         let mut one = render_input(multisend, 1, &one_calldata);
         one.chain_id = 4_242_424_242;
-        assert!(legacy_values_are_exactly_renderable(&one, None));
+        assert!(legacy_values_are_exactly_renderable(&one, crate::erc20::set::Erc20Scope::empty()));
         let one_pages =
-            render_safe_pages_inner(&one, None, None, &resolver).expect("raw one must fit");
+            render_safe_pages_inner(&one, None, crate::erc20::set::Erc20Scope::empty(), &resolver).expect("raw one must fit");
 
         let two_packed = pack_record(0, &[0x44; 20], &be_u128(2), &[]);
         let two_calldata = encode_multisend(&two_packed);
         let mut two = render_input(multisend, 1, &two_calldata);
         two.chain_id = 4_242_424_242;
-        assert!(legacy_values_are_exactly_renderable(&two, None));
+        assert!(legacy_values_are_exactly_renderable(&two, crate::erc20::set::Erc20Scope::empty()));
         let two_pages =
-            render_safe_pages_inner(&two, None, None, &resolver).expect("raw two must fit");
+            render_safe_pages_inner(&two, None, crate::erc20::set::Erc20Scope::empty(), &resolver).expect("raw two must fit");
         assert_ne!(one_pages.buf, two_pages.buf);
 
         // A record value page has three value rows: 38 raw digits fit
@@ -1619,17 +1622,17 @@ mod inner_kind_hint_tests {
         let fit_calldata = encode_multisend(&fit_packed);
         let mut fit = render_input(multisend, 1, &fit_calldata);
         fit.chain_id = 4_242_424_242;
-        assert!(legacy_values_are_exactly_renderable(&fit, None));
-        assert!(render_safe_pages_inner(&fit, None, None, &resolver).is_ok());
+        assert!(legacy_values_are_exactly_renderable(&fit, crate::erc20::set::Erc20Scope::empty()));
+        assert!(render_safe_pages_inner(&fit, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_ok());
 
         let wide_value = [0xff; 32];
         let wide_packed = pack_record(0, &[0x44; 20], &wide_value, &[]);
         let wide_calldata = encode_multisend(&wide_packed);
         let mut wide = render_input(multisend, 1, &wide_calldata);
         wide.chain_id = 4_242_424_242;
-        assert!(!legacy_values_are_exactly_renderable(&wide, None));
+        assert!(!legacy_values_are_exactly_renderable(&wide, crate::erc20::set::Erc20Scope::empty()));
         assert!(
-            render_safe_pages_inner(&wide, None, None, &resolver).is_err(),
+            render_safe_pages_inner(&wide, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_err(),
             "a raw value wider than the real three-row painter must refuse"
         );
     }
@@ -1647,7 +1650,7 @@ mod inner_kind_hint_tests {
         );
         let resolver = NameResolver::new();
         assert!(
-            render_safe_pages_inner(&input, None, None, &resolver).is_err(),
+            render_safe_pages_inner(&input, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_err(),
             "a known opaque record must refuse the entire MultiSend"
         );
 
@@ -1662,7 +1665,7 @@ mod inner_kind_hint_tests {
             1,
             &unknown_calldata,
         );
-        assert!(render_safe_pages_inner(&unknown, None, None, &resolver).is_ok());
+        assert!(render_safe_pages_inner(&unknown, None, crate::erc20::set::Erc20Scope::empty(), &resolver).is_ok());
     }
 }
 
@@ -2046,7 +2049,7 @@ pub(super) fn presign_unique_idx(raw_data: &[u8]) -> Option<usize> {
 pub(super) fn multisend_record_semantics<'a>(
     input: &SafeRenderInput<'a>,
     cow: Option<&'a VerifiedCowswapV3>,
-    erc20: Option<&'a Erc20Metadata<'a>>,
+    erc20: Erc20Scope<'a, 'a>,
     presign_unique_idx: Option<usize>,
     idx: usize,
     rec: MsRecord<'a>,
@@ -2054,7 +2057,7 @@ pub(super) fn multisend_record_semantics<'a>(
     let value = U256(rec.value);
     let raw_kind = classify_record_kind(&rec.to, value.is_zero(), rec.data, &input.safe_address);
     let needs_value_page = record_needs_value_page(&raw_kind, value.is_zero());
-    let meta = erc20.filter(|m| m.contract == rec.to);
+    let meta = erc20.lookup_exact(input.chain_id, &rec.to);
     let kind: InnerKind<'a> = match raw_kind {
         MsRecordKind::EmptyCall => InnerKind::EmptyCall,
         MsRecordKind::PlainEth => InnerKind::PlainEth,
@@ -2087,7 +2090,7 @@ fn append_multisend_pages<'a>(
     input: &SafeRenderInput<'a>,
     count: usize,
     cow: Option<&'a VerifiedCowswapV3>,
-    erc20: Option<&'a Erc20Metadata<'a>>,
+    erc20: Erc20Scope<'a, 'a>,
     resolver: &NameResolver<'_>,
 ) -> usize {
     let mut p = start;

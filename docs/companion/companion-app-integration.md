@@ -1514,8 +1514,10 @@ function buildSignPayload(p: {
   const erc20 = p.erc20Bundle ?? new Uint8Array(0);
   if (erc20.length === 0) return head;
 
-  // Frozen reserved slot after ERC-20 metadata; firmware requires length 0.
-  return concatBytes([head, u16be(erc20.length), erc20, u16be(0)]);
+  // Slot 1: extra ERC-20 bundles in an ERC20_SET envelope (firmware with
+  // CAP_ERC20_BUNDLE_SET, bit 7, only); length 0 otherwise.
+  const set = p.erc20SetEnvelope ?? new Uint8Array(0);
+  return concatBytes([head, u16be(erc20.length), erc20, u16be(set.length), set]);
 }
 ```
 

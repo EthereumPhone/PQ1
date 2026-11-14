@@ -31,6 +31,7 @@ use super::safe_display::{
 };
 use super::safe_mgmt::{SafeMgmtOp, ThresholdValue};
 use crate::erc20::bundle::Erc20Metadata;
+use crate::erc20::set::Erc20Scope;
 use crate::erc20::calldata::{is_unlimited_amount, Erc20Call};
 use crate::names::NameResolver;
 use crate::tx::eip1559::U256;
@@ -53,7 +54,7 @@ pub(crate) fn emit_safe_v1(
     out: &mut Screens,
     safe: &VerifiedSafeV1<'_>,
     cow: Option<&VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
 ) -> Result<SafeBodyReceipt, ()> {
     let tx = decode_canonical(&safe.canonical).unwrap_or(SafeTx {
@@ -94,7 +95,7 @@ pub(crate) fn emit_safe_offchain(
     out: &mut Screens,
     safe: &VerifiedSafeV1<'_>,
     cow: Option<&VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
 ) -> Result<SafeBodyReceipt, ()> {
     let tx = decode_canonical(&safe.canonical).map_err(|_| ())?;
@@ -121,7 +122,7 @@ pub(crate) fn emit_safe_exec(
     out: &mut Screens,
     exec: &VerifiedSafeExec<'_>,
     cow: Option<&VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
 ) -> Result<SafeBodyReceipt, ()> {
     let d = &exec.decoded;
@@ -215,7 +216,7 @@ fn emit_inner(
     out: &mut Screens,
     input: &SafeRenderInput<'_>,
     cow: Option<&VerifiedCowswapV3>,
-    erc20: Option<&Erc20Metadata<'_>>,
+    erc20: Erc20Scope<'_, '_>,
     resolver: &NameResolver<'_>,
 ) -> Result<SafeBodyReceipt, ()> {
     let sem = classify(input, cow, erc20)?;
@@ -255,7 +256,9 @@ fn emit_inner(
                 value: inner_value,
                 data: input.raw_data,
                 data_hash: input.data_hash,
-                erc20,
+                // Only the entry for THIS inner target (never the refund
+                // token's entry).
+                erc20: erc20.lookup_exact(input.chain_id, &input.to),
             };
             let before = e.n;
             emit_inner_kind(&mut e, kind, &ctx, resolver)?;
@@ -307,7 +310,7 @@ fn emit_inner(
         } else {
             let amt = if input.gas_token.iter().all(|&b| b == 0) {
                 native_derived_amount(&worst, input.chain_id)
-            } else if let Some(m) = erc20.filter(|m| m.contract == input.gas_token) {
+            } else if let Some(m) = erc20.lookup_exact(input.chain_id, &input.gas_token) {
                 token_amount(&worst, m.decimals, m.symbol, AmountRows::Two)
             } else {
                 raw_units(&worst)
@@ -392,7 +395,7 @@ fn emit_multisend<'a>(
     input: &SafeRenderInput<'a>,
     count: usize,
     cow: Option<&'a VerifiedCowswapV3>,
-    erc20: Option<&'a Erc20Metadata<'a>>,
+    erc20: Erc20Scope<'a, 'a>,
     resolver: &NameResolver<'_>,
 ) -> Result<usize, ()> {
     let before = e.n;

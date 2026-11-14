@@ -68,7 +68,7 @@ use crate::aa::userop::{
     batch_member_commitment, batch_tuple_commitment_from_members, compute_sphincs_digest_v06,
     sha256_bytes, AaUserOpParamsV06Sha256, BatchInnerTx, ENTRY_POINT_V06, SHA256_EMPTY,
 };
-use crate::erc20::bundle::{verify_erc20_bundle, Erc20Metadata};
+use crate::erc20::bundle::verify_erc20_bundle;
 use crate::names::{verify_name_bundle, NameResolver};
 use crate::selectors::{parse_self_attest_bundle, verify_selector_bundle, SelectorMeta};
 use crate::tx::display::batch::{build_final_summary_pages, wrap_pages_with_batch_banner};
@@ -107,7 +107,6 @@ struct ParsedTx {
 /// `pick_sign_pages` call window. The native CoW verifier returns an owned
 /// fixed-size buffer, hence no `'a` on that variant.
 struct RoutedTrailers<'a> {
-    erc20: Option<Erc20Metadata<'a>>,
     cow_order: Option<VerifiedCowswapV3>,
     safe_v1: Option<VerifiedSafeV1<'a>>,
     erc7730: Option<VerifiedProofSet<'a>>,
@@ -119,7 +118,6 @@ impl<'a> RoutedTrailers<'a> {
     /// dispatching parsed trailer records into the per-tx array.
     fn empty() -> Self {
         Self {
-            erc20: None,
             cow_order: None,
             safe_v1: None,
             erc7730: None,
@@ -474,6 +472,9 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
     // enforced at parse time inside `parse_batch_trailers`.
     let mut routed: [Option<RoutedTrailers<'_>>; MAX_BATCH_TXS] = [const { None }; MAX_BATCH_TXS];
     let mut resolver = NameResolver::new();
+    // ERC-20 metadata is batch-wide (CAP_ERC20_BUNDLE_SET): every member
+    // resolves the token it shows by exact `(chain, address)`.
+    let mut erc20_set = crate::erc20::set::Erc20Set::new();
 
     for rec_opt in &parsed_trailers.records[..parsed_trailers.count] {
         let rec = match rec_opt.as_ref() {
@@ -501,9 +502,15 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 // grant metadata authority to an unrelated direct ERC-7730
                 // call (RT-ERC20-01).
                 if meta.chain_id == chain_id {
-                    routed[rec.tx_idx as usize]
-                        .get_or_insert_with(RoutedTrailers::empty)
-                        .erc20 = Some(meta);
+                    match erc20_set.insert(meta) {
+                        crate::erc20::set::InsertOutcome::Added
+                        | crate::erc20::set::InsertOutcome::SameLeaf => {}
+                        crate::erc20::set::InsertOutcome::Conflict
+                        | crate::erc20::set::InsertOutcome::Full => {
+                            ui::show_status("Batch sign", "bad erc20 set");
+                            return NscStatus::InvalidPointer as u32;
+                        }
+                    }
                 }
             }
             TRAILER_KIND_COW_ORDER => {
@@ -609,6 +616,19 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
                 return NscStatus::InternalError as u32;
             }
         }
+    }
+
+    // FI A/B proof of the batch-wide ERC-20 set: rebuild it from the raw
+    // records after a random delay and require entry-for-entry identity.
+    if !crate::erc20::set::erc20_batch_set_proven(
+        parsed_trailers
+            .iter_kind(TRAILER_KIND_ERC20)
+            .map(|r| &snap[r.start..r.start + r.len]),
+        chain_id,
+        &erc20_set,
+    ) {
+        ui::show_status("Batch sign", "erc20 set proof");
+        return NscStatus::InvalidPointer as u32;
     }
 
     // ── 5d. Pass 2: verify the deferred COW_ORDER (CoW v3) records ──────
@@ -1202,7 +1222,7 @@ pub(super) unsafe fn run(args: &GatewayArgs) -> u32 {
         // direct/pinned-MultiSend target. Invalid raw Safe trailers never
         // participate, while legitimate direct ERC-7730 protocol calls keep
         // their friendly metadata.
-        let chain_verified_erc20 = r.and_then(|r| r.erc20.as_ref());
+        let chain_verified_erc20 = erc20_set.scope_all();
 
         // MultiSend gate — same shared decision as the single-tx
         // handler (`multisend_sign_gate`): a verified Safe context

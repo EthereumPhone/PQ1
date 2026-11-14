@@ -501,7 +501,7 @@ pub fn pick_sign_pages(
         erc7730,
         None,
         None,
-        erc20,
+        crate::erc20::set::Erc20Scope::from(erc20),
         selector,
         resolver,
         proofs,
@@ -522,7 +522,7 @@ pub fn pick_sign_pages_with_erc7730_evidence(
     safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
     erc7730: Option<&crate::tx::erc7730::VerifiedProofSet<'_>>,
     expected_nested: Option<&crate::tx::erc7730::NestedCallBinding>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     selector: Option<&crate::selectors::SelectorMeta<'_>>,
     resolver: &crate::names::NameResolver<'_>,
     proofs: &mut DispatchPageProofs,
@@ -600,7 +600,7 @@ fn pick_sign_pages_impl(
     erc7730: Option<&crate::tx::erc7730::VerifiedDescriptor<'_>>,
     erc7730_set: Option<&crate::tx::erc7730::VerifiedProofSet<'_>>,
     expected_nested: Option<&crate::tx::erc7730::NestedCallBinding>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     selector: Option<&crate::selectors::SelectorMeta<'_>>,
     resolver: &crate::names::NameResolver<'_>,
     proofs: &mut DispatchPageProofs,
@@ -785,7 +785,7 @@ fn render_verified_erc7730_two_pass<'ir>(
     descriptor: Option<&crate::tx::erc7730::VerifiedDescriptor<'ir>>,
     set: Option<&crate::tx::erc7730::VerifiedProofSet<'ir>>,
     expected_nested: Option<&crate::tx::erc7730::NestedCallBinding>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     resolver: &crate::names::NameResolver<'_>,
     device_signer: &[u8; 20],
     proof: &mut Erc7730TranscriptProof,
@@ -887,7 +887,7 @@ fn pick_sign_pages_inner(
     erc7730: Option<&crate::tx::erc7730::VerifiedDescriptor<'_>>,
     erc7730_set: Option<&crate::tx::erc7730::VerifiedProofSet<'_>>,
     expected_nested: Option<&crate::tx::erc7730::NestedCallBinding>,
-    erc20: Option<&crate::erc20::bundle::Erc20Metadata<'_>>,
+    erc20: crate::erc20::set::Erc20Scope<'_, '_>,
     selector: Option<&crate::selectors::SelectorMeta<'_>>,
     resolver: &crate::names::NameResolver<'_>,
     transcript_proof: &mut Erc7730TranscriptProof,
@@ -896,7 +896,7 @@ fn pick_sign_pages_inner(
     // public-envelope bind locally so future or host-only call sites cannot
     // lend metadata from another chain to any renderer. Surface-specific
     // contract/tokenPath checks below remain mandatory as a separate axis.
-    let erc20 = erc20.filter(|meta| meta.chain_id == tx.chain_id);
+    let erc20 = erc20.restrict(|meta| meta.chain_id == tx.chain_id);
 
     if let Some(v3) = v3 {
         // Safe-wrapped CoW presign: when the v3 order was verified
@@ -916,6 +916,7 @@ fn pick_sign_pages_inner(
                 safe.canonical[sphincs_tz_shared::SAFE_OFF_OPERATION],
                 &safe_v1_inner_to(safe),
                 safe.raw_data,
+                &safe_v1_gas_token(safe),
             );
             return super::safe_display::render_safe_v1_pages(safe, Some(v3), inner_meta, resolver);
         }
@@ -925,6 +926,7 @@ fn pick_sign_pages_inner(
                 exec.decoded.operation,
                 &exec.decoded.to,
                 exec.decoded.data,
+                &exec.decoded.gas_token,
             );
             return super::safe_display::render_safe_exec_pages(
                 exec,
@@ -951,6 +953,7 @@ fn pick_sign_pages_inner(
             safe.canonical[sphincs_tz_shared::SAFE_OFF_OPERATION],
             &safe_v1_inner_to(safe),
             safe.raw_data,
+            &safe_v1_gas_token(safe),
         );
         return super::safe_display::render_safe_v1_pages(safe, None, inner_meta, resolver);
     }
@@ -963,6 +966,7 @@ fn pick_sign_pages_inner(
             exec.decoded.operation,
             &exec.decoded.to,
             exec.decoded.data,
+            &exec.decoded.gas_token,
         );
         return super::safe_display::render_safe_exec_pages(exec, None, inner_meta, resolver);
     }
@@ -1122,9 +1126,14 @@ fn pick_sign_pages_inner(
             // Neither grants authority to this direct ERC-20 branch. Re-check
             // the outer contract and fall back to the raw unknown-token view
             // on mismatch.
-            let matched = erc20.filter(|meta| {
-                super::value_page::direct_erc20_meta_matches(&meta.contract, tx.to.as_ref())
-            });
+            // Keyed: the entry for exactly `(tx.chain_id, tx.to)`, then the
+            // pre-existing direct-match predicate as an independent re-check.
+            let matched = tx
+                .to
+                .and_then(|to| erc20.lookup_exact(tx.chain_id, &to))
+                .filter(|meta| {
+                    super::value_page::direct_erc20_meta_matches(&meta.contract, tx.to.as_ref())
+                });
             Ok(match matched {
                 Some(meta) => {
                     let amount = match &call {
@@ -1412,29 +1421,37 @@ mod transcript_proof_tests {
 
 /// Inner `to` decoded from a verified `safe_v1` canonical.
 /// The ERC-20 metadata the Safe painters receive from the dispatcher ladder:
-/// chain-bound to the outer transaction, then address-matched to the
-/// verified inner call / multiSend records. Shared with the pixel-UI screen
-/// emitter (`px_lift`) so both painters see the same capability; the
-/// renderer still re-matches per record before applying it.
-pub(crate) fn safe_route_meta<'m>(
+/// chain-bound to the outer transaction, then restricted to tokens the
+/// verified SafeTx itself names (inner `to`, a pinned multiSend record's
+/// target, or the refund `gasToken`). Shared with the pixel-UI screen emitter
+/// (`px_lift`) so both painters see the same capability; every painter still
+/// resolves the token it shows by exact address.
+pub(crate) fn safe_route_meta<'s, 'm>(
     tx_chain_id: u64,
     safe_v1: Option<&crate::tx::eip712::safe::VerifiedSafeV1<'_>>,
     safe_exec: Option<&crate::tx::eip712::safe::VerifiedSafeExec<'_>>,
-    erc20: Option<&'m crate::erc20::bundle::Erc20Metadata<'m>>,
-) -> Option<&'m crate::erc20::bundle::Erc20Metadata<'m>> {
-    let erc20 = erc20.filter(|meta| meta.chain_id == tx_chain_id);
+    erc20: crate::erc20::set::Erc20Scope<'s, 'm>,
+) -> crate::erc20::set::Erc20Scope<'s, 'm> {
+    let erc20 = erc20.restrict(|meta| meta.chain_id == tx_chain_id);
     if let Some(safe) = safe_v1 {
         return safe_inner_meta(
             erc20,
             safe.canonical[sphincs_tz_shared::SAFE_OFF_OPERATION],
             &safe_v1_inner_to(safe),
             safe.raw_data,
+            &safe_v1_gas_token(safe),
         );
     }
     if let Some(exec) = safe_exec {
-        return safe_inner_meta(erc20, exec.decoded.operation, &exec.decoded.to, exec.decoded.data);
+        return safe_inner_meta(
+            erc20,
+            exec.decoded.operation,
+            &exec.decoded.to,
+            exec.decoded.data,
+            &exec.decoded.gas_token,
+        );
     }
-    None
+    crate::erc20::set::Erc20Scope::empty()
 }
 
 fn safe_v1_inner_to(safe: &crate::tx::eip712::safe::VerifiedSafeV1<'_>) -> [u8; 20] {
@@ -1445,22 +1462,32 @@ fn safe_v1_inner_to(safe: &crate::tx::eip712::safe::VerifiedSafeV1<'_>) -> [u8; 
     t
 }
 
-/// Address-match filter for ERC-20 metadata on the Safe surfaces: the bundle
-/// applies when its contract is the verified inner `to`, or when one of the
-/// records in a verified pinned `MultiSendCallOnly` delegatecall targets it.
-/// The renderer still re-matches per record before applying the metadata.
-fn safe_inner_meta<'m>(
-    erc20: Option<&'m crate::erc20::bundle::Erc20Metadata<'m>>,
+fn safe_v1_gas_token(safe: &crate::tx::eip712::safe::VerifiedSafeV1<'_>) -> [u8; 20] {
+    let mut t = [0u8; 20];
+    t.copy_from_slice(
+        &safe.canonical
+            [sphincs_tz_shared::SAFE_OFF_GAS_TOKEN..sphincs_tz_shared::SAFE_OFF_GAS_TOKEN + 20],
+    );
+    t
+}
+
+/// Address-match filter for ERC-20 metadata on the Safe surfaces: an entry
+/// is admitted when its contract is the verified inner `to`, the target of a
+/// record in a verified pinned `MultiSendCallOnly` delegatecall, or the
+/// signed refund `gasToken` (non-zero). Painters still resolve by address.
+fn safe_inner_meta<'s, 'm>(
+    erc20: crate::erc20::set::Erc20Scope<'s, 'm>,
     operation: u8,
     inner_to: &[u8; 20],
     raw_data: &[u8],
-) -> Option<&'m crate::erc20::bundle::Erc20Metadata<'m>> {
-    erc20.filter(|m| {
+    gas_token: &[u8; 20],
+) -> crate::erc20::set::Erc20Scope<'s, 'm> {
+    erc20.restrict(|m| {
         crate::tx::eip712::safe::erc20_metadata_matches_verified_safe_call(
             operation,
             inner_to,
             raw_data,
             &m.contract,
-        )
+        ) || (*gas_token != [0u8; 20] && m.contract == *gas_token)
     })
 }

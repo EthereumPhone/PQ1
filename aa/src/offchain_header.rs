@@ -23,7 +23,9 @@
 //! The final `trailer` MUST end exactly at `payload.len()` — the wire-level
 //! EXACT-consumption guard: every byte is accounted, no hidden trailing data.
 
-use pqsigner_proto::{MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN, MAX_OFFCHAIN_EIP712_NESTED_LEN};
+use pqsigner_proto::{
+    ERC20_SET_MAX_LEN, MAX_OFFCHAIN_EIP712_ENCODED_DATA_LEN, MAX_OFFCHAIN_EIP712_NESTED_LEN,
+};
 
 /// The five sections a typed-data frame decodes to. `encoded_data` /
 /// `nested_blob` / `trailer` borrow from the input payload; the two 32-byte
@@ -42,6 +44,9 @@ pub struct Eip712TypedFrame<'a> {
     pub nested_blob: &'a [u8],
     /// The ERC-7730 descriptor bundle trailer.
     pub trailer: &'a [u8],
+    /// Optional ERC-20 set envelope (`CAP_ERC20_BUNDLE_SET`) after the
+    /// trailer; empty = absent.
+    pub erc20_set: &'a [u8],
 }
 
 /// Why a typed-data frame was refused. `status_str` is the ≤16-col banner the
@@ -63,8 +68,11 @@ pub enum Eip712FrameError {
     NoTrailerLen,
     /// `trailer_len == 0`.
     EmptyTrailer,
-    /// `trailer_len` does not consume the payload EXACTLY (hidden bytes).
+    /// `trailer_len` runs past the payload end.
     BadTrailerLen,
+    /// The optional ERC-20 set tail is empty, over the cap, or does not end
+    /// EXACTLY at the payload end (hidden bytes).
+    BadErc20SetLen,
 }
 
 impl Eip712FrameError {
@@ -80,6 +88,7 @@ impl Eip712FrameError {
             Eip712FrameError::NoTrailerLen => "no trailer",
             Eip712FrameError::EmptyTrailer => "empty trailer",
             Eip712FrameError::BadTrailerLen => "bad trailer_len",
+            Eip712FrameError::BadErc20SetLen => "bad erc20 set",
         }
     }
 }
@@ -152,11 +161,27 @@ pub fn parse_eip712_typed_frame(
     if trailer_len == 0 {
         return Err(Eip712FrameError::EmptyTrailer);
     }
-    // EXACT consumption: the trailer must be the rest of the payload.
-    if p + trailer_len != payload.len() {
+    if trailer_len > payload.len() - p {
         return Err(Eip712FrameError::BadTrailerLen);
     }
     let trailer = &payload[p..p + trailer_len];
+    p += trailer_len;
+
+    // EXACT consumption: the trailer is the rest of the payload, or it is
+    // followed by exactly one non-empty `[u16 len][ERC-20 set envelope]`.
+    let erc20_set: &[u8] = if p == payload.len() {
+        &[]
+    } else {
+        if payload.len() - p < 2 {
+            return Err(Eip712FrameError::BadErc20SetLen);
+        }
+        let set_len = read_u16(payload, p) as usize;
+        p += 2;
+        if set_len == 0 || set_len > ERC20_SET_MAX_LEN || p + set_len != payload.len() {
+            return Err(Eip712FrameError::BadErc20SetLen);
+        }
+        &payload[p..]
+    };
 
     Ok(Eip712TypedFrame {
         domain_separator,
@@ -164,6 +189,7 @@ pub fn parse_eip712_typed_frame(
         encoded_data,
         nested_blob,
         trailer,
+        erc20_set,
     })
 }
 
@@ -197,6 +223,9 @@ pub struct SafeTxFrame<'a> {
     pub names: [&'a [u8]; OFFCHAIN_MAX_NAME_BUNDLES],
     /// How many entries of `names` are present.
     pub names_count: usize,
+    /// Optional ERC-20 set envelope (`CAP_ERC20_BUNDLE_SET`) after the names
+    /// section; empty = absent. `erc20` stays its primary entry.
+    pub erc20_set: &'a [u8],
 }
 
 /// The sections of an `OFFCHAIN_KIND_COW_ORDER` payload.
@@ -248,6 +277,8 @@ pub enum StructuredFrameError {
     BadLegLen,
     /// Bytes remain after the last section (hidden trailing data).
     TrailingBytes,
+    /// The optional ERC-20 set tail is empty or over the cap.
+    BadErc20SetLen,
     /// A Permit2 variant byte outside 0..=3.
     BadPermit2Variant,
     /// A Permit2 token count outside its variant's range.
@@ -268,6 +299,7 @@ impl StructuredFrameError {
             StructuredFrameError::BadNameLen => "bad name len",
             StructuredFrameError::BadLegLen => "bad leg len",
             StructuredFrameError::TrailingBytes => "struct trailing",
+            StructuredFrameError::BadErc20SetLen => "bad erc20 set",
             StructuredFrameError::BadPermit2Variant => "permit2 variant",
             StructuredFrameError::BadPermit2Count => "permit2 count",
         }
@@ -357,6 +389,21 @@ pub fn parse_safe_tx_frame(payload: &[u8]) -> Result<SafeTxFrame<'_>, Structured
         names[i] = n;
         i += 1;
     }
+    // Optional ERC-20 set tail: absent, or exactly one non-empty section.
+    let erc20_set: &[u8] = if p == payload.len() {
+        &[]
+    } else {
+        let set = take_u16_prefixed(
+            payload,
+            &mut p,
+            ERC20_SET_MAX_LEN,
+            StructuredFrameError::BadErc20SetLen,
+        )?;
+        if set.is_empty() {
+            return Err(StructuredFrameError::BadErc20SetLen);
+        }
+        set
+    };
     if p != payload.len() {
         return Err(StructuredFrameError::TrailingBytes);
     }
@@ -366,6 +413,7 @@ pub fn parse_safe_tx_frame(payload: &[u8]) -> Result<SafeTxFrame<'_>, Structured
         cow,
         names,
         names_count,
+        erc20_set,
     })
 }
 
@@ -504,7 +552,29 @@ mod structured_tests {
         let good = safe_payload(&[1, 2, 3], &[], &[], &[]);
         let mut t = good.clone();
         t.push(0);
-        assert_eq!(parse_safe_tx_frame(&t).unwrap_err(), StructuredFrameError::TrailingBytes);
+        assert_eq!(parse_safe_tx_frame(&t).unwrap_err(), StructuredFrameError::Truncated);
+        // The optional ERC-20 set tail (CAP_ERC20_BUNDLE_SET): non-empty,
+        // capped, and exactly one section.
+        let with = |tail: &[u8]| {
+            let mut v = good.clone();
+            v.extend_from_slice(tail);
+            v
+        };
+        assert_eq!(
+            parse_safe_tx_frame(&with(&[0, 0])).unwrap_err(),
+            StructuredFrameError::BadErc20SetLen
+        );
+        assert_eq!(parse_safe_tx_frame(&with(&[0, 1, 0xAA])).unwrap().erc20_set, &[0xAA]);
+        assert!(parse_safe_tx_frame(&good).unwrap().erc20_set.is_empty());
+        assert_eq!(
+            parse_safe_tx_frame(&with(&[0, 1, 0xAA, 0])).unwrap_err(),
+            StructuredFrameError::TrailingBytes
+        );
+        let over = (pqsigner_proto::ERC20_SET_MAX_LEN as u16 + 1).to_be_bytes();
+        assert_eq!(
+            parse_safe_tx_frame(&with(&over)).unwrap_err(),
+            StructuredFrameError::BadErc20SetLen
+        );
         for cut in 0..good.len() {
             assert!(parse_safe_tx_frame(&good[..cut]).is_err(), "cut {cut}");
         }
@@ -634,6 +704,42 @@ mod structured_tests {
     }
 }
 
+#[cfg(test)]
+mod erc20_set_tail_tests {
+    use super::*;
+
+    fn minimal_typed(tail: &[u8]) -> std::vec::Vec<u8> {
+        let mut v = std::vec![0u8; 71];
+        v[1] = 1;
+        v[69] = 1;
+        v[70] = 0xAB;
+        v.extend_from_slice(tail);
+        v
+    }
+
+    #[test]
+    fn typed_frame_accepts_exactly_one_nonempty_set_tail() {
+        let a = minimal_typed(&[]);
+        let f = parse_eip712_typed_frame(&a, false).unwrap();
+        assert_eq!((f.trailer, f.erc20_set), (&[0xAB][..], &[][..]));
+        let b = minimal_typed(&[0, 2, 7, 8]);
+        let f = parse_eip712_typed_frame(&b, false).unwrap();
+        assert_eq!((f.trailer, f.erc20_set), (&[0xAB][..], &[7u8, 8][..]));
+        for bad in [&[0u8][..], &[0, 0], &[0, 2, 7], &[0, 1, 7, 8]] {
+            assert_eq!(
+                parse_eip712_typed_frame(&minimal_typed(bad), false).unwrap_err(),
+                Eip712FrameError::BadErc20SetLen,
+                "{bad:?}"
+            );
+        }
+        let over = (ERC20_SET_MAX_LEN as u16 + 1).to_be_bytes();
+        assert_eq!(
+            parse_eip712_typed_frame(&minimal_typed(&over), false).unwrap_err(),
+            Eip712FrameError::BadErc20SetLen
+        );
+    }
+}
+
 #[cfg(kani)]
 mod verification {
     use super::*;
@@ -664,8 +770,16 @@ mod verification {
             let tr = f.trailer.as_ptr() as usize;
             assert!(ed >= base && ed + f.encoded_data.len() <= base + len);
             assert!(tr >= base && tr + f.trailer.len() <= base + len);
-            // … and the trailer ends EXACTLY at the payload end (exact consumption).
-            assert_eq!(tr + f.trailer.len(), base + len);
+            // … and the payload is consumed EXACTLY: the trailer ends at the
+            // payload end, or the optional ERC-20 set tail (length word + a
+            // non-empty envelope) does.
+            if f.erc20_set.is_empty() {
+                assert_eq!(tr + f.trailer.len(), base + len);
+            } else {
+                let es = f.erc20_set.as_ptr() as usize;
+                assert_eq!(tr + f.trailer.len() + 2, es);
+                assert_eq!(es + f.erc20_set.len(), base + len);
+            }
             // is_v3 ⟺ a nested blob section was parsed (possibly empty).
             if !is_v3 {
                 assert!(f.nested_blob.is_empty());
@@ -696,6 +810,9 @@ mod verification {
         while i < f.names_count {
             n += 2 + f.names[i].len();
             i += 1;
+        }
+        if !f.erc20_set.is_empty() {
+            n += 2 + f.erc20_set.len();
         }
         n
     }

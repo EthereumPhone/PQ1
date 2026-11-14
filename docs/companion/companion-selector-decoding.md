@@ -368,7 +368,7 @@ fixed header + variable `data_len` calldata). All length prefixes are
 ```
 [fixed 330B header][data_len][data]
 [erc20_bundle_len    ][erc20_bundle    ]   ← slot 0
-[reserved_v1_len     ][no payload      ]   ← slot 1: reserved, length MUST be zero
+[erc20_set_len       ][ERC20_SET env   ]   ← slot 1: extra ERC-20 bundles (bit 7), else length 0
 [cow_order_len           ][cow_order_bundle    ]   ← slot 2: legacy name for native CoW v3 trailer
 [safe_v1_len         ][safe_v1_payload ]   ← slot 3
 [curated_selector_len][curated_bundle  ]   ← slot 4 (Phase 2)
@@ -378,6 +378,7 @@ fixed header + variable `data_len` calldata). All length prefixes are
 
 Rules:
 
+- Slot 1 (UPDATE 2026-11-14, formerly reserved): `ERC20_SET` envelope (`CAP_ERC20_BUNDLE_SET`, GET_DEVICE_INFO bit 7, UPDATE 2026-11-14): `magic u16 BE 0xE020 | version u8 = 1 | count u8 1..=6 | count × { u16 BE len 1..=1120, ERC-20 bundle }`, at most 4096 B, consumed exactly. Each bundle is verified like slot 0; one that does not verify, or is for another chain, is dropped (that token shows as a raw integer). A framing error, the same token twice, two different bundles for one token, or more than 7 tokens in total refuses the request. Every screen resolves the token it shows by its exact `(chain, address)`, so an entry for an address the request does not sign changes nothing, and a Safe refund `gasToken` entry never labels the inner call. Firmware without bit 7 refuses a non-empty slot 1 / tail: send the envelope only when the bit is set.
 - Slots are **positional**. To say "no ERC-20 metadata, no retired v1 payload,
   no native CoW v3 trailer, no Safe, no curated selector, but yes
   self-attest", write `0x0000` for the first five lengths, then

@@ -286,7 +286,7 @@ fn derive_wire_facts(wire: &[u8]) -> Result<ForcedWireFacts, ForcedWireFactsErro
         wire,
         cursor,
         total_len,
-        0,
+        sphincs_tz_shared::ERC20_SET_MAX_LEN,
         "forced reserved frame",
     )
     .map_err(|_| ForcedWireFactsError::Invalid)?;
