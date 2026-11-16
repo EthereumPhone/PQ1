@@ -4350,6 +4350,10 @@ ui-noop = []  # Silent no-op UI for standalone USB operation (no debugger)
 # `pqsigner-hw/tick-hook`: the busy film also draws from the hash driver
 # (`pqsigner_hash_tick` in main.rs), not only at the signer's progress reports.
 ui-px = ["pqsigner-hw/tick-hook"]
+# Dev/bench only (#1154 A/B): land a Signed film BEFORE the sign handler
+# returns, as before #1154. Default under `ui-px` is to return the released
+# signature at once and land the film from PendSV.
+ui-px-landing-blocking = []
 # `ui-px` at SPI ÷4 = 40 MHz (production board without the dev kit's LED on SCK).
 ui-px-spi40 = ["ui-px", "ui-lcd"]
 # Bench-only: overlay the previous frame's render / blit / period (ms) in the
