@@ -78,9 +78,19 @@ fn load_copy() {
         // always mapped and readable from the secure world; nothing in the
         // secure world writes it). `dst + i` lies inside SRAM3, which no
         // linker region, static or stack uses; the only reference ever made
-        // to it is the shared slice `window()` returns, and this function
-        // runs only from `verify_atlas`, on the single secure thread, before
-        // a new view is handed out.
+        // to it is the shared slice `window()` returns. This function runs
+        // only from `verify_atlas`, before it hands out a new view, and that
+        // has two callers: (a) the gateway call that owns the glass, in
+        // thread mode with the gateway gate held (one at a time), and
+        // (b) PendSV, for the idle re-unlock dialog ("Locked", the PIN entry).
+        // No #1154 landing path reaches it: landing frames, the finish and
+        // the deferred Ready all read `atlas_film_frame` (pinned in
+        // `film_landing_pure_tests`). In (b), a preempted gateway call can
+        // still hold a view over these bytes only if the idle wipe fired
+        // during a NON-busy call that draws; sign and unlock hold
+        // `HandlerGuard`, which defers the wipe. That is the #152 overlap,
+        // older than #1154, and the copy then rewrites the bytes with what
+        // non-secure flash holds at that moment.
         unsafe { core::ptr::write_volatile(dst.add(i), core::ptr::read_volatile(src.add(i))) };
     }
 }
