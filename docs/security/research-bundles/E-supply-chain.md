@@ -953,8 +953,11 @@ hold (`lcd::landing_yield` → `landing_finish`), before it samples a single
 edge. So the non-secure world gets the signature early but cannot put the
 next consent screen, or any other screen, over SIGNED. Only a lock cuts the
 landing: `CMD_LOCK`, which zeroizes before it draws "Locked", and the idle
-wipe, which locks before its PIN prompt. The finish counts as a busy handler
-for the watchdog and the idle wipe, as the in-handler landing did. The
+wipe, which locks before its PIN prompt. The hold is a visible hold: it is
+measured from the first frame that actually showed the check, not from the
+film's wall clock, so a long non-drawing call that kept frames off the glass
+cannot shorten it. The finish counts as a busy handler for the watchdog and
+the idle wipe, as the in-handler landing did. The
 evidence is source pins with mutation controls
 (`secure/src/display_under_test/film_landing_pure_tests.rs`); no CI step runs
 the landing (QEMU builds compile it out), and it has not been measured on
