@@ -123,3 +123,158 @@ fn every_family_carries_a_distinct_failed_caption() {
         );
     }
 }
+
+// ---- #1154: a Signed film lands after its sign returned ---------------------
+//
+// The three release sites still call `film_resolve(Signed)` (pinned above),
+// but the film's landing frames are drawn from PendSV once the handler has
+// returned the released signature. These scans hold the properties that make
+// that sound; each was a design decision, and each has a quiet way to break.
+
+const MAIN: &str = include_str!("../main.rs");
+const UI_MOD: &str = include_str!("../ui/mod.rs");
+
+/// The body of the first `fn` whose signature starts with `sig`, up to its
+/// closing brace at column 0.
+fn body<'a>(src: &'a str, sig: &str) -> &'a str {
+    let rest = src.split(sig).nth(1).unwrap_or_else(|| panic!("missing `{sig}`"));
+    &rest[..rest.find("\n}\n").unwrap_or(rest.len())]
+}
+
+fn at(hay: &str, needle: &str) -> usize {
+    hay.find(needle).unwrap_or_else(|| panic!("missing `{needle}`"))
+}
+
+/// A Signed resolve returns before the scripted landing, after handing the
+/// film to the background; every other ending still lands in place.
+#[test]
+fn signed_resolve_returns_before_the_landing_loop() {
+    let fr = body(LCD, "pub fn film_resolve(e: Ending) {");
+    // The one-shot hold is consumed first, so an early return (bad atlas)
+    // cannot leave it armed for the next sign's resolve.
+    assert!(at(fr, "let hold = LANDING_HOLD.swap(false, Ordering::Relaxed);") < at(fr, "assets::atlas_verified()"));
+    let branch = at(fr, "if matches!(e, Ending::Signed) && !hold {");
+    let write = at(fr, "(*core::ptr::addr_of_mut!(FILM)).write((anim, now));");
+    let set = at(fr, "LANDING_SET.store(true, Ordering::Release);");
+    let ret = branch + fr[branch..].find("        return;\n").expect("the Signed branch returns");
+    let lp = at(fr, "    loop {\n");
+    // The slot is written before the flag publishes it, and the branch
+    // returns before the blocking loop that every other ending runs.
+    assert!(branch < write && write < set && set < ret && ret < lp);
+}
+
+/// `show_ending` (the batch's between-member interstitial, followed at once
+/// by the next dialog) lands in place: in the background it would be cut
+/// after one frame.
+#[test]
+fn show_ending_lands_before_returning() {
+    let se = body(LCD, "pub fn show_ending(e: Ending) {");
+    assert!(at(se, "LANDING_HOLD.store(true, Ordering::Relaxed);") < at(se, "film_resolve(e);"));
+}
+
+/// One owner for the glass: every other way onto the panel ends a landing
+/// before it draws.
+#[test]
+fn every_other_draw_ends_the_landing_first() {
+    let pfc = body(LCD, "fn present_frame_cols(");
+    let cut = at(pfc, "if !IN_LANDING_STEP.load(Ordering::Relaxed) {\n        landing_cut();\n    }");
+    assert!(cut < at(pfc, "film_reap(true);") && cut < at(pfc, "FRAME_IN_FLIGHT.swap(true"));
+    let clear = body(LCD, "pub fn clear() {");
+    assert!(at(clear, "landing_cut();") < at(clear, "lcd::fill_screen(0);"));
+    let start = body(LCD, "pub fn film_start_with(s: &Screen) {");
+    assert!(at(start, "landing_cut();") < at(start, "(*core::ptr::addr_of_mut!(FILM)).write((anim, now));"));
+    // ANTI-VACUITY: the cut must clear the flag, not just reap.
+    let lc = body(LCD, "pub fn landing_cut() {");
+    assert!(lc.contains("if LANDING_SET.swap(false, Ordering::AcqRel) {"));
+}
+
+/// The non-secure world runs between landing frames and owns the atlas
+/// flash, so every landing frame re-verifies it; and no landing frame is
+/// left streaming (or its band buffers unwiped) when PendSV returns.
+#[test]
+fn landing_frames_reverify_the_atlas_and_finish_before_returning() {
+    let ls = body(LCD, "pub fn landing_step() {");
+    assert!(ls.contains("let Some(atlas) = assets::atlas_verified() else {\n        landing_cut();\n        return;\n    };"));
+    assert!(!ls.contains("atlas_film_frame"), "the in-film unverified view is unsound between landing frames");
+    assert!(ls.contains("film_reap(true);"));
+    let bg = body(LCD, "fn film_bg_allowed() -> bool {");
+    assert!(
+        bg.trim_start().contains("if IN_LANDING_STEP.load(Ordering::Relaxed) {\n        return false;\n    }"),
+        "a landing frame must never stream in the background"
+    );
+    assert!(at(bg, "return false;") < at(bg, "#[cfg(feature = \"ui-px-film-bench\")]"));
+}
+
+/// The deferred "Ready" is drawn only after the landing flag is cleared;
+/// the other order would defer it again, for ever.
+#[test]
+fn ready_is_drawn_after_the_landing_ends() {
+    let ls = body(LCD, "pub fn landing_step() {");
+    assert!(at(ls, "LANDING_SET.store(false, Ordering::Release);") < at(ls, "crate::ui::show_status(\"PQSigner OS\", \"Ready\");"));
+    let ss = body(UI_MOD, "pub fn show_status(title: &str, sub: &str) {");
+    assert!(ss.contains("if title == \"PQSigner OS\" && sub == \"Ready\" && px::lcd::landing_defer_ready() {\n        return;\n    }"));
+}
+
+/// PendSV draws a landing frame only with the gateway gate taken by itself
+/// (no gateway call preempted) and no handler busy; a lock by the idle wipe
+/// ends the landing and runs the re-unlock instead. SysTick never pends it
+/// while a handler is busy.
+#[test]
+fn pendsv_draws_a_landing_frame_only_between_gateway_calls() {
+    let pendsv = &MAIN[at(MAIN, "fn PendSV() {")..];
+    let gate = at(pendsv, "let _gateway_token = nsc::GATEWAY_GATE.try_enter();");
+    let live = at(pendsv, "if crate::ui::px::lcd::landing_live() {");
+    let locked = at(pendsv, "if nsc::is_definitely_locked() {\n            crate::ui::px::lcd::landing_cut();\n            if !timeout::is_idle() {");
+    let step = at(pendsv, "if gate_free && !nsc::handler_is_busy() {\n                crate::ui::px::lcd::landing_step();");
+    let reunlock = at(pendsv, "enter_pin()");
+    assert!(gate < live && live < locked && locked < step && step < reunlock);
+    assert!(pendsv[gate..step].contains("let gate_free = _gateway_token.is_some();"));
+    let systick = body(MAIN, "fn SysTick() {");
+    assert!(systick.contains("if crate::ui::px::lcd::landing_due(timeout::now()) && !nsc::handler_is_busy() {"));
+}
+
+/// SysTick re-pends PendSV while a landing frame draws (it is not over yet,
+/// so it still reads as due), and that PendSV tail-chains in before the
+/// non-secure world runs. Without a due check at the top of the step it
+/// draws the next frame back to back and the non-secure world gets no CPU
+/// until the film is done — the signature would still reach the companion
+/// at the end of the film. The gap is measured from where a frame ENDS.
+#[test]
+fn landing_frames_leave_the_non_secure_world_a_gap() {
+    let ls = body(LCD, "pub fn landing_step() {");
+    let due = at(ls, "if !landing_due(timeout::now()) {\n        return;\n    }");
+    assert!(due < at(ls, "assets::atlas_verified()") && due < at(ls, "anim.step(now);"));
+    // The gap starts after the frame (and its reap), not before it.
+    assert!(at(ls, "film_reap(true);") < at(ls, "LANDING_LAST_MS.store(timeout::now(), Ordering::Relaxed);"));
+    let ld = body(LCD, "pub fn landing_due(now: u32) -> bool {");
+    assert!(ld.contains("now.wrapping_sub(LANDING_LAST_MS.load(Ordering::Relaxed)) >= LANDING_GAP_MS"));
+}
+
+/// The legacy glyph blitter (`flush` when the pixel engine declines, and the
+/// secret-row path always) writes the panel without `present_frame_cols`.
+#[test]
+fn the_glyph_blitter_ends_the_landing_too() {
+    const DISPLAY: &str = include_str!("../ui/lcd.rs");
+    let fl = body(DISPLAY, "    pub fn flush(&mut self) {");
+    assert!(at(fl, "crate::ui::px::lcd::landing_cut();") < at(fl, "self.blit_glyph(c, r, &cols);"));
+    let fs = body(DISPLAY, "    pub fn flush_with_secret_rows(&mut self, secret_rows: &[(usize, &[u8])]) {");
+    assert!(at(fs, "crate::ui::px::lcd::landing_cut();") < at(fs, "self.blit_glyph("));
+}
+
+/// A lock during a landing that is NOT the idle wipe (CMD_LOCK zeroizes, then
+/// draws; a SysTick between pends PendSV for the landing) ends the landing and
+/// returns: only the idle wipe may run the PIN re-unlock. Without this the
+/// landing's own PendSV opened an unrequested PIN dialog.
+#[test]
+fn a_non_idle_lock_during_a_landing_opens_no_pin_dialog() {
+    let pendsv = &MAIN[at(MAIN, "fn PendSV() {")..];
+    let live = at(pendsv, "if crate::ui::px::lcd::landing_live() {");
+    let branch = &pendsv[live..at(pendsv, "// Only run if we're actually locked (avoids spurious re-entry)")];
+    let not_idle = at(branch, "if !timeout::is_idle() {");
+    let ret = not_idle + branch[not_idle..].find("return;").expect("the non-idle lock returns");
+    let cut = at(branch, "crate::ui::px::lcd::landing_cut();");
+    assert!(cut < not_idle && not_idle < ret, "cut, then return unless the idle wipe locked it");
+    // ANTI-VACUITY: cmd_lock really zeroizes before it draws (the window this closes).
+    const LOCK: &str = include_str!("../nsc/cmd_lock.rs");
+    assert!(at(LOCK, "super::zeroize_sensitive_state();") < at(LOCK, "crate::ui::show_status(\"Locked\", \"\");"));
+}

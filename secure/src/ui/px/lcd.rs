@@ -553,6 +553,12 @@ const BAND_RENDER_CYC: u32 = 240_000;
 /// unchanged ([`pqsigner_ui_px::damage`]). A partial frame is never
 /// `complete`: it does not count as "this screen was presented".
 fn present_frame_cols(frame: &Frame<'_>, font: &Font<'_>, _force: bool, cols: Option<(i32, i32)>, bg: bool) -> FrameCost {
+    // #1154: a Signed film still landing after its sign returned owns the
+    // glass only until anything else draws; that draw ends the landing here.
+    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    if !IN_LANDING_STEP.load(Ordering::Relaxed) {
+        landing_cut();
+    }
     // `complete` stays false through every early exit below: the latch, the
     // band-0 `Strip::new` failure, and the mid-loop `break`.
     let mut cost = FrameCost::default();
@@ -1187,6 +1193,12 @@ fn film_reap(_wait: bool) -> bool {
 static FILM_BG_ON: AtomicBool = AtomicBool::new(true);
 
 fn film_bg_allowed() -> bool {
+    // #1154: a landing frame is drawn from PendSV and must be on the glass,
+    // its band buffers wiped, before the non-secure world runs again.
+    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    if IN_LANDING_STEP.load(Ordering::Relaxed) {
+        return false;
+    }
     #[cfg(feature = "ui-px-film-bench")]
     {
         FILM_BG_ON.load(Ordering::Relaxed)
@@ -1414,12 +1426,18 @@ pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_RO
 
 /// Clear the panel (before the legacy glyph blitter paints again).
 pub fn clear() {
+    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    landing_cut();
     lcd::fill_screen(0);
 }
 
 /// Play an ending (the film-less cancel resolve, or the running film's
 /// landing) through its result hold and leave the resting frame on the glass.
 pub fn show_ending(e: Ending) {
+    // #1154: callers draw the next dialog right after this, so the ending
+    // lands here rather than in the background.
+    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    LANDING_HOLD.store(true, Ordering::Relaxed);
     film_resolve(e);
 }
 
@@ -1525,6 +1543,9 @@ pub fn film_start() {
 /// status record whose disc seeds the qubits and whose caption breathes
 /// over the orbit (GENERATING KEYS, WIPING, …).
 pub fn film_start_with(s: &Screen) {
+    // #1154: the landing film lives in `FILM`; end it before a new film.
+    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    landing_cut();
     let Some(atlas) = assets::atlas_verified() else {
         return;
     };
@@ -2301,6 +2322,8 @@ fn film_tick_due(back_to_back: bool, _src: u8) {
 /// film running — play the film-less resolve. Returns when the result has
 /// held `RESULT_HOLD_MS`; the resting frame stays on the glass.
 pub fn film_resolve(e: Ending) {
+    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    let hold = LANDING_HOLD.swap(false, Ordering::Relaxed);
     let Some(atlas) = assets::atlas_verified() else {
         film_abort();
         reset_film_look();
@@ -2335,6 +2358,31 @@ pub fn film_resolve(e: Ending) {
     anim.film_resolve(e, now);
     let marks = atlas.marks();
     let font = atlas.font();
+    // #1154: the released signature leaves now. A Signed film paints its
+    // first landing frame and lands in the background (SysTick pends PendSV,
+    // which calls `landing_step`) instead of holding the gateway for the
+    // rest of the script and its 2.45 s result hold. Every other ending, and
+    // `show_ending`, still lands before returning.
+    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    if matches!(e, Ending::Signed) && !hold {
+        IN_LANDING_STEP.store(true, Ordering::Relaxed);
+        anim.step(now);
+        let _ = present_film(&anim, &marks, &font, true);
+        IN_LANDING_STEP.store(false, Ordering::Relaxed);
+        // The landing keeps its own screen; the next film starts from the
+        // default look, as after a blocking landing.
+        reset_film_look();
+        // SAFETY: single-threaded driver state; `FILM_SET` was cleared above
+        // and `LANDING_SET` is still false, so nothing reads the slot while
+        // it is written.
+        unsafe {
+            (*core::ptr::addr_of_mut!(FILM)).write((anim, now));
+        }
+        LANDING_THEN_READY.store(false, Ordering::Relaxed);
+        LANDING_LAST_MS.store(timeout::now(), Ordering::Relaxed);
+        LANDING_SET.store(true, Ordering::Release);
+        return;
+    }
     loop {
         let t = timeout::now();
         anim.step(t);
@@ -2357,6 +2405,133 @@ static FILM_BEGAN: (AtomicU32, AtomicU32) = (AtomicU32::new(0), AtomicU32::new(0
 #[must_use]
 pub fn film_live() -> bool {
     FILM_LIVE.load(Ordering::Relaxed)
+}
+
+// ---- #1154: a Signed film lands after its sign returned --------------------
+//
+// The sign handlers release the signature as soon as the FI chain is done;
+// the film's remaining landing frames (spiral, flash, check, result hold)
+// are drawn from PendSV, which SysTick pends `LANDING_GAP_MS` after the
+// previous landing frame ENDED, so the non-secure world (USB is polled from
+// its thread mode, below PendSV) always gets at least that long between
+// frames. PendSV draws only while no gateway call is in progress.
+//
+// One owner for the glass: any other draw (`present_frame_cols` outside a
+// landing step, `clear`, `film_start_with`) ends the landing first, and the
+// sign handlers' closing "Ready" waits for it (`landing_defer_ready`).
+//
+// The atlas lives in non-secure flash and the non-secure world runs between
+// landing frames, so every landing frame re-verifies it (`atlas_verified`,
+// not the in-film `atlas_film_frame`) and the landing stops on a mismatch.
+// Landing frames are synchronous (`film_bg_allowed`): when PendSV returns,
+// no band stream is in flight and the band buffers are wiped.
+//
+// The landing film is kept in `FILM` with `FILM_SET` false, so the busy
+// film's ticks and `film_finish_pending` never see it.
+
+/// The landing film in `FILM` is live.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+static LANDING_SET: AtomicBool = AtomicBool::new(false);
+/// A landing frame is being drawn (its own draws are not a cut).
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+static IN_LANDING_STEP: AtomicBool = AtomicBool::new(false);
+/// When the previous landing frame ended (ms).
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+static LANDING_LAST_MS: AtomicU32 = AtomicU32::new(0);
+/// The sign handler's "Ready" status, deferred to the end of the landing.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+static LANDING_THEN_READY: AtomicBool = AtomicBool::new(false);
+/// One-shot: the next `film_resolve` lands before returning (`show_ending`).
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+static LANDING_HOLD: AtomicBool = AtomicBool::new(false);
+/// The non-secure world's minimum time between landing frames: one panel
+/// refresh (`FRAME_PERIOD_MS`).
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+const LANDING_GAP_MS: u32 = FRAME_PERIOD_MS;
+
+/// A Signed film is still landing after its sign returned.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+#[must_use]
+pub fn landing_live() -> bool {
+    LANDING_SET.load(Ordering::Acquire)
+}
+
+/// SysTick: a landing frame is due.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+#[must_use]
+pub fn landing_due(now: u32) -> bool {
+    landing_live() && now.wrapping_sub(LANDING_LAST_MS.load(Ordering::Relaxed)) >= LANDING_GAP_MS
+}
+
+/// PendSV, with no gateway call in progress: a landing frame was due but
+/// could not be drawn now; wait another gap before asking again.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+pub fn landing_defer() {
+    LANDING_LAST_MS.store(timeout::now(), Ordering::Relaxed);
+}
+
+/// PendSV, with no gateway call in progress: draw the next landing frame.
+/// When the film has landed and held, the resting frame is drawn in full,
+/// the landing ends, and a deferred "Ready" is drawn.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+pub fn landing_step() {
+    // Due again only a gap after the previous frame ENDED. SysTick preempts
+    // a landing frame and re-pends PendSV while it draws (the frame is not
+    // over, so it still reads as due); that PendSV tail-chains in before the
+    // non-secure world runs and must not draw a second frame back to back,
+    // or the non-secure world gets no CPU until the film is done.
+    if !landing_due(timeout::now()) {
+        return;
+    }
+    let Some(atlas) = assets::atlas_verified() else {
+        landing_cut();
+        return;
+    };
+    let now = timeout::now();
+    // SAFETY: `LANDING_SET` says `film_resolve` wrote the slot; single-
+    // threaded driver state (PendSV with no gateway call is the only caller,
+    // and nothing else reads `FILM` while `FILM_SET` is false).
+    let anim = unsafe { &mut (*core::ptr::addr_of_mut!(FILM)).assume_init_mut().0 };
+    IN_LANDING_STEP.store(true, Ordering::Relaxed);
+    anim.step(now);
+    let done = anim.film_done(now);
+    if done {
+        // The resting frame, in full: what stays on the glass.
+        let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None, None, None);
+    } else {
+        let _ = present_film(anim, &atlas.marks(), &atlas.font(), false);
+    }
+    film_reap(true);
+    IN_LANDING_STEP.store(false, Ordering::Relaxed);
+    LANDING_LAST_MS.store(timeout::now(), Ordering::Relaxed);
+    if done {
+        LANDING_SET.store(false, Ordering::Release);
+        if LANDING_THEN_READY.swap(false, Ordering::Relaxed) {
+            crate::ui::show_status("PQSigner OS", "Ready");
+        }
+    }
+}
+
+/// End a landing where it stands (another draw takes the glass). The flag
+/// is cleared before the reap, so a draw the reap makes is not a cut.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+pub fn landing_cut() {
+    if LANDING_SET.swap(false, Ordering::AcqRel) {
+        film_reap(true);
+        LANDING_THEN_READY.store(false, Ordering::Relaxed);
+    }
+}
+
+/// `ui::show_status("PQSigner OS", "Ready")` while a landing plays: draw it
+/// when the landing ends rather than over it. `true` = deferred.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+pub fn landing_defer_ready() -> bool {
+    if landing_live() {
+        LANDING_THEN_READY.store(true, Ordering::Relaxed);
+        true
+    } else {
+        false
+    }
 }
 
 /// Lands the running film on [`Ending::Failed`] if the sign window is left

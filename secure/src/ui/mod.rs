@@ -248,6 +248,11 @@ pub fn splash() {
 /// busy film, the idle screen, the detail-grid notice — `px::status_map`);
 /// the 16×4 page below is only the fallback when the pixel path declines.
 pub fn show_status(title: &str, sub: &str) {
+    // #1154: the sign handlers' closing "Ready" waits for a landing film.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd", not(feature = "ui-px-landing-blocking")))]
+    if title == "PQSigner OS" && sub == "Ready" && px::lcd::landing_defer_ready() {
+        return;
+    }
     #[cfg(feature = "ui-px")]
     if px::screens::status(title, sub) {
         return;

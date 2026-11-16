@@ -5308,6 +5308,13 @@ fn SysTick() {
         ARCH.icsr.write(1 << 28); // PENDSVSET
     }
 
+    // #1154: a Signed film landing after its sign returned draws its next
+    // frame from PendSV, never while a gateway handler is busy.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd", feature = "stm32u585", not(feature = "ui-px-landing-blocking")))]
+    if crate::ui::px::lcd::landing_due(timeout::now()) && !nsc::handler_is_busy() {
+        ARCH.icsr.write(1 << 28); // PENDSVSET
+    }
+
     // #981: the deferral above is bounded. A busy handler may hold the wipe
     // off only until it reaches its own idle check point; one that has not
     // returned `WIPE_DEFER_*_LIMIT_TICKS` after the deadline was preempted by
@@ -5508,6 +5515,44 @@ fn PendSV() {
     // (short handlers without `HandlerGuard`). Dropped on every return path
     // below.
     let _gateway_token = nsc::GATEWAY_GATE.try_enter();
+
+    // #1154: the next frame of a Signed film landing after its sign returned.
+    // Drawn only with the gate taken here (no gateway call preempted) and no
+    // handler busy; otherwise asked again a gap later.
+    //
+    // A lock ends the landing. Only the IDLE wipe goes on to the re-unlock
+    // below (it pended this PendSV for that). Any other lock (CMD_LOCK
+    // zeroizes before it draws "Locked", and a SysTick in between pends this
+    // PendSV for the landing) must not open a PIN dialog nobody asked for:
+    // before #1154 nothing pended PendSV there.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd", not(feature = "ui-px-landing-blocking")))]
+    if crate::ui::px::lcd::landing_live() {
+        if nsc::is_definitely_locked() {
+            crate::ui::px::lcd::landing_cut();
+            if !timeout::is_idle() {
+                // SAFETY: as below: the single-core re-entry flag.
+                unsafe {
+                    core::ptr::write_volatile(core::ptr::addr_of_mut!(PENDSV_IN_FLIGHT), 0);
+                }
+                return;
+            }
+        } else {
+            // The token keeps its pinned name (#846); this is only its read.
+            #[allow(clippy::used_underscore_binding)]
+            let gate_free = _gateway_token.is_some();
+            if gate_free && !nsc::handler_is_busy() {
+                crate::ui::px::lcd::landing_step();
+            } else {
+                crate::ui::px::lcd::landing_defer();
+            }
+            // SAFETY: the single-core re-entry flag set at entry; PendSV
+            // does not nest, so this is its only writer now.
+            unsafe {
+                core::ptr::write_volatile(core::ptr::addr_of_mut!(PENDSV_IN_FLIGHT), 0);
+            }
+            return;
+        }
+    }
 
     // Only run if we're actually locked (avoids spurious re-entry)
     if nsc::is_unlocked() {
