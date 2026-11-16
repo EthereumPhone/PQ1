@@ -953,7 +953,13 @@ hold (`lcd::landing_yield` → `landing_finish`), before it samples a single
 edge. So the non-secure world gets the signature early but cannot put the
 next consent screen, or any other screen, over SIGNED. Only a lock cuts the
 landing: `CMD_LOCK`, which zeroizes before it draws "Locked", and the idle
-wipe, which locks before its PIN prompt. The hold is a visible hold: it is
+wipe, which locks before its PIN prompt. A reset ends it too, and the
+non-secure world can cause one that is fully visible (the flash double-ECC
+NMI reboot). A non-secure atlas swap does not: every atlas re-verify
+(`assets::verify_atlas`) first plays the landing out on the copy
+`film_resolve` verified, before it re-copies, so a failed verify refuses the
+next dialog only after SIGNED and its check have been shown. The hold is a
+visible hold: it is
 measured from the first frame that actually showed the check, not from the
 film's wall clock, so a long non-drawing call that kept frames off the glass
 cannot shorten it. The finish counts as a busy handler for the watchdog and
