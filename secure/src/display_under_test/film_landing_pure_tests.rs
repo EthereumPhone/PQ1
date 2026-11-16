@@ -497,3 +497,27 @@ fn the_landing_blocking_switch_is_fenced_built_and_the_cfgs_agree() {
     const CARGO: &str = include_str!("../../Cargo.toml");
     assert!(CARGO.contains("gpio-buttons = [\"stm32u585\"]") && CARGO.contains("ui-lcd = [\"spi1-arduino\", \"gpio-buttons\""));
 }
+
+/// Re-review N1: every dialog verifies the atlas before it draws, and a
+/// failed verify latches `BOOT_BAD`, which refuses the landing's film view.
+/// So `verify_atlas` plays a live landing out first, on the copy
+/// `film_resolve` verified, before it re-copies and re-hashes: a non-secure
+/// atlas swap after the sign can refuse the next dialog, but only after
+/// SIGNED and its check have been shown.
+#[test]
+fn an_atlas_reverify_plays_the_landing_out_first() {
+    const ASSETS: &str = include_str!("../ui/px/assets.rs");
+    let va = body(ASSETS, "pub fn verify_atlas() -> Result<AtlasRef, ()> {");
+    let y = at(va, "super::lcd::landing_yield();");
+    assert!(y < at(va, "match verify_atlas_inner() {"));
+    assert!(va.contains("#[cfg(not(feature = \"ui-px-landing-blocking\"))]\n    super::lcd::landing_yield();"));
+    // The copy is rewritten in exactly one place, reached only through
+    // `verify_atlas`, so nothing re-copies before the yield.
+    assert_eq!(ASSETS.matches("load_copy();").count(), 1);
+    assert!(body(ASSETS, "fn verify_atlas_inner() -> Result<AtlasRef, ()> {").contains("load_copy();"));
+    assert_eq!(ASSETS.matches("verify_atlas_inner()").count(), 2, "one definition, one call (in verify_atlas)");
+    // ANTI-VACUITY: the finish draws from the film view, which a failed
+    // verify would refuse; that is why the order matters.
+    let f = body(LCD, "fn landing_finish() {");
+    assert!(f.contains("let Some(atlas) = assets::atlas_film_frame() else {"));
+}

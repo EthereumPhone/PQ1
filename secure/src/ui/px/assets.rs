@@ -152,6 +152,16 @@ pub fn verify_atlas() -> Result<AtlasRef, ()> {
     // tampered atlas makes THIS function fail, the tamper itself forced
     // every caller onto the legacy paint, which then rendered through that
     // stale `BOOT_OK`. Fail-open, in the one place that must fail closed.
+    //
+    // #1154 re-review N1: a Signed landing still live plays out FIRST, on
+    // the copy `film_resolve` verified (only `load_copy` below writes it).
+    // Every dialog verifies before it draws, so otherwise a non-secure atlas
+    // swap after the sign made this verify fail, latch `BOOT_BAD`, and leave
+    // the landing's film view refused: the landing ended without its check,
+    // a way to replace SIGNED that is not a lock. A locked device cuts here
+    // instead (the PendSV re-unlock dialog verifies too).
+    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    super::lcd::landing_yield();
     match verify_atlas_inner() {
         Ok(a) => {
             BOOT_STATE.store(BOOT_OK, Ordering::Relaxed);
