@@ -228,7 +228,7 @@ fn a_dialog_cannot_start_before_the_live_landing_has_shown_the_check() {
     // only through `film_done`, busy for the watchdog, on the film view.
     let f = body(LCD, "fn landing_finish() {");
     let lp = at(f, "        loop {\n");
-    let done = at(f, "            if anim.film_done(t) {\n                break;\n            }");
+    let done = at(f, "            if anim.film_done(t) && landing_held(t) {\n                break;\n            }");
     assert!(lp < done);
     let looped = &f[lp..done];
     assert!(looped.contains("let _ = build_and_present(anim, &marks, &font, None, None, None);"));
@@ -239,6 +239,22 @@ fn a_dialog_cannot_start_before_the_live_landing_has_shown_the_check() {
     assert!(at(f, "let _busy = crate::nsc::HandlerGuard::enter();") < lp);
     assert!(f.contains("assets::atlas_film_frame()") && !f.contains("atlas_verified"));
 
+    // The hold is a VISIBLE hold: the film clock is wall-clock, so the loop
+    // also waits until the check has been ON THE GLASS for RESULT_HOLD_MS,
+    // measured from the first frame that showed it (noted after each frame).
+    assert!(at(looped, "let _ = build_and_present(") < at(looped, "landing_note_check(anim, t);"));
+    let held = body(LCD, "fn landing_held(now: u32) -> bool {");
+    assert!(held.contains("LANDING_CHECK_SHOWN.load(Ordering::Relaxed)\n        && now.wrapping_sub(LANDING_CHECK_AT.load(Ordering::Relaxed)) >= pqsigner_ui_px::loading::RESULT_HOLD_MS"));
+    let note = body(LCD, "fn landing_note_check(anim: &Anim, t: u32) {");
+    assert!(note.contains("if !LANDING_CHECK_SHOWN.load(Ordering::Relaxed) && anim.film_done(t.wrapping_add(pqsigner_ui_px::loading::RESULT_HOLD_MS)) {"));
+    assert!(at(note, "LANDING_CHECK_AT.store(t, Ordering::Relaxed);") < at(note, "LANDING_CHECK_SHOWN.store(true, Ordering::Relaxed);"));
+    // Each landing starts unshown; the background step needs the visible
+    // hold too before it ends the landing.
+    let fr2 = body(LCD, "pub fn film_resolve(e: Ending) {");
+    assert!(at(fr2, "LANDING_CHECK_SHOWN.store(false, Ordering::Relaxed);") < at(fr2, "LANDING_SET.store(true, Ordering::Release);"));
+    let ls = body(LCD, "pub fn landing_step() {");
+    assert!(ls.contains("let done = anim.film_done(now) && landing_held(now);"));
+    assert!(at(ls, "film_reap(true);") < at(ls, "landing_note_check(anim, now);"));
     // ANTI-VACUITY: `film_done` really waits for the check (T7) and its hold.
     const LOADING: &str = include_str!("../../../pqsigner-ui-px/src/loading.rs");
     assert!(LOADING.contains("self.ready.is_some() && self.film_t(now) >= T7 + RESULT_HOLD_MS"));

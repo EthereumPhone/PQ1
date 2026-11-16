@@ -2388,6 +2388,9 @@ pub fn film_resolve(e: Ending) {
         }
         LANDING_THEN_READY.store(false, Ordering::Relaxed);
         LANDING_LAST_MS.store(timeout::now(), Ordering::Relaxed);
+        // The hold is measured from the first frame that shows the check
+        // (`landing_held`); this first frame is still before it.
+        LANDING_CHECK_SHOWN.store(false, Ordering::Relaxed);
         LANDING_SET.store(true, Ordering::Release);
         return;
     }
@@ -2503,6 +2506,34 @@ static LANDING_HOLD: AtomicBool = AtomicBool::new(false);
 /// refresh (`FRAME_PERIOD_MS`).
 #[cfg(not(feature = "ui-px-landing-blocking"))]
 const LANDING_GAP_MS: u32 = FRAME_PERIOD_MS;
+/// The landing's result (the check) has been on the glass since
+/// [`LANDING_CHECK_AT`] (ms).
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+static LANDING_CHECK_SHOWN: AtomicBool = AtomicBool::new(false);
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+static LANDING_CHECK_AT: AtomicU32 = AtomicU32::new(0);
+
+/// After a landing frame built at `t` is on the glass: note when the result
+/// first showed. `film_done` is "result landed, then `RESULT_HOLD_MS`", so the
+/// result is up at `t` exactly when the film would be done a hold later.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+fn landing_note_check(anim: &Anim, t: u32) {
+    if !LANDING_CHECK_SHOWN.load(Ordering::Relaxed) && anim.film_done(t.wrapping_add(pqsigner_ui_px::loading::RESULT_HOLD_MS)) {
+        LANDING_CHECK_AT.store(t, Ordering::Relaxed);
+        LANDING_CHECK_SHOWN.store(true, Ordering::Relaxed);
+    }
+}
+
+/// The result has been ON THE GLASS for `RESULT_HOLD_MS` (review M1). The
+/// film clock is wall-clock, so `film_done` alone counts time in which a
+/// long non-drawing gateway call kept every frame off the glass: the finish
+/// would then paint the resting SIGNED once and hand over at once. The hold
+/// is measured from the first frame that actually showed the check.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+fn landing_held(now: u32) -> bool {
+    LANDING_CHECK_SHOWN.load(Ordering::Relaxed)
+        && now.wrapping_sub(LANDING_CHECK_AT.load(Ordering::Relaxed)) >= pqsigner_ui_px::loading::RESULT_HOLD_MS
+}
 
 /// A Signed film is still landing after its sign returned.
 #[cfg(not(feature = "ui-px-landing-blocking"))]
@@ -2556,7 +2587,8 @@ pub fn landing_step() {
     let done = {
         let _frame = LandingFrame::enter();
         anim.step(now);
-        let done = anim.film_done(now);
+        // Done only once the result has been on the glass for the hold.
+        let done = anim.film_done(now) && landing_held(now);
         if done {
             // The resting frame, in full: what stays on the glass.
             let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None, None, None);
@@ -2564,6 +2596,7 @@ pub fn landing_step() {
             let _ = present_film(anim, &atlas.marks(), &atlas.font(), false);
         }
         film_reap(true);
+        landing_note_check(anim, now);
         done
     };
     LANDING_LAST_MS.store(timeout::now(), Ordering::Relaxed);
@@ -2680,7 +2713,10 @@ fn landing_finish() {
             let t = timeout::now();
             anim.step(t);
             let _ = build_and_present(anim, &marks, &font, None, None, None);
-            if anim.film_done(t) {
+            landing_note_check(anim, t);
+            // The hold counts from when the check was first ON THE GLASS,
+            // not from film time (`landing_held`).
+            if anim.film_done(t) && landing_held(t) {
                 break;
             }
         }
