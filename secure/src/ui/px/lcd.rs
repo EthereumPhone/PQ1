@@ -2665,6 +2665,11 @@ pub fn landing_gateway_tick() {
 /// not carry a landing past a dialog. `present_frame_cols` checks the flag
 /// itself, because landing frames draw through it.
 #[cfg(not(feature = "ui-px-landing-blocking"))]
+// Re-review N2: kept out of line, so its frame (and the finish's nested
+// `Frame`) exists only while a landing is actually being yielded, never in
+// every activation of the draw paths it is called from (`present_frame_cols`
+// runs under the busy film, deep inside C10 signing).
+#[inline(never)]
 pub fn landing_yield() -> bool {
     if !landing_live() {
         return false;
@@ -2688,6 +2693,7 @@ pub fn landing_yield() -> bool {
 /// the finish counts as busy (`HandlerGuard`), as the in-handler landing
 /// did; the idle wipe defers for it the same way (bounded by #981).
 #[cfg(not(feature = "ui-px-landing-blocking"))]
+#[inline(never)]
 fn landing_finish() {
     // Take the landing: once this is clear no landing step reads `FILM`.
     if !LANDING_SET.swap(false, Ordering::AcqRel) {

@@ -521,3 +521,14 @@ fn an_atlas_reverify_plays_the_landing_out_first() {
     let f = body(LCD, "fn landing_finish() {");
     assert!(f.contains("let Some(atlas) = assets::atlas_film_frame() else {"));
 }
+
+/// Re-review N2: the yield and the finish stay out of line. Inlined into
+/// `present_frame_cols` (which the busy film calls deep inside C10 signing)
+/// their frames, including the finish's nested `Frame`, would grow every
+/// activation of every draw path, not only the one that yields a landing.
+#[test]
+fn the_yield_and_the_finish_stay_out_of_line() {
+    assert!(LCD.contains("#[inline(never)]\npub fn landing_yield() -> bool {"));
+    assert!(LCD.contains("#[inline(never)]\nfn landing_finish() {"));
+    assert!(LCD.contains("#[inline(never)]\npub fn landing_gateway_tick() {"));
+}
