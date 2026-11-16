@@ -487,6 +487,10 @@ compile_error!(
         // geometry, with no OTP anti-rollback. Dev units only.
         feature = "devunit-ab",
         feature = "devunit-test-fault",
+        // #1154 A/B bench switch: lands a Signed film inside the sign call,
+        // as before #1154. Harmless (the old behaviour) but an unreviewed
+        // trusted-UI timing branch of a shipping image (review L7).
+        feature = "ui-px-landing-blocking",
     )
 ))]
 compile_error!(

@@ -3037,7 +3037,7 @@ override PROD_FORBIDDEN := e2e-test dev-testkey mock-se debug-log otp-hardcoded-
                  pin-gate-e2e dual-se-multi-unlock-e2e se-i2c-probe ui-px-frametime ui-px-film-gaps ui-px-film-bench ui-px-dma2d-bench hash-probe hw-sha256-crosscheck \
                  duress-ui-test unlock-diag \
                  ui-px-bench ui-px-te-probe gateway-gate-off optiga-probe se050-probe \
-                 se050-platform-scp-tool
+                 se050-platform-scp-tool ui-px-landing-blocking
 
 # HIGH-1 compile-time baseline (audit pin-unlock 20260625): the denylist above
 # stops never-ship features, but a denylist CANNOT express "a required
@@ -5273,6 +5273,7 @@ UI_PX_SUFFIXES := \
 	debug-log,ui-px,ui-px-dma,ui-px-frametime,ui-px-bench,ui-px-te-probe \
 	debug-log,ui-px,ui-px-dma,ui-px-frametime,ui-px-bench,rng-fault-probe \
 	debug-log,ui-px,ui-px-spi40 \
+	debug-log,ui-px,ui-px-landing-blocking \
 	ui-px,ui-px-dma
 UI_PX_CONFIGS := $(foreach b,board-pq1 board-iota2,\
 	$(foreach s,$(UI_PX_SUFFIXES),mock-se,dev-testkey,ui-lcd,stm32u585,$(b),$(s)))

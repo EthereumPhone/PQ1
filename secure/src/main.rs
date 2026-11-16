@@ -5541,7 +5541,7 @@ fn PendSV() {
     // zeroizes before it draws "Locked", and a SysTick in between pends this
     // PendSV for the landing) must not open a PIN dialog nobody asked for:
     // before #1154 nothing pended PendSV there.
-    #[cfg(all(feature = "ui-px", feature = "ui-lcd", not(feature = "ui-px-landing-blocking")))]
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd", feature = "stm32u585", not(feature = "ui-px-landing-blocking")))]
     if crate::ui::px::lcd::landing_live() {
         if nsc::is_definitely_locked() {
             crate::ui::px::lcd::landing_cut();

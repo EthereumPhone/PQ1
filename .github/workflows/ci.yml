@@ -280,7 +280,7 @@ jobs:
           # that target (see its own comment). Keep this list and that
           # target's prerequisites in step.
           #
-          # Cost: 18 target-triple `cargo check`s. If that becomes the long
+          # Cost: 20 target-triple `cargo check`s. If that becomes the long
           # pole, trim the matrix in `UI_PX_SUFFIXES` — do not drop
           # `ui-px-dma`, which is the whole reason this exists, nor
           # `rng-fault-probe`: #835 added that feature and its image is the

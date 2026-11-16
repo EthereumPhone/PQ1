@@ -450,3 +450,34 @@ fn the_pin_reunlock_runs_only_when_the_idle_wipe_asked() {
     let refused = &pendsv[swap..at(pendsv, "if nsc::is_unlocked() {")];
     assert!(refused.contains("core::ptr::write_volatile(core::ptr::addr_of_mut!(PENDSV_IN_FLIGHT), 0);") && refused.contains("return;"));
 }
+
+/// Review L7: `ui-px-landing-blocking` is a dev/bench A/B switch. It is
+/// fenced out of production in both places the other dev features are (the
+/// `mode-production` compile fence and the Makefile `PROD_FORBIDDEN` ship
+/// gate), it is compiled by the ui-px config matrix on both boards, and the
+/// cfgs that hand a landing off and pace it agree on `stm32u585`.
+#[test]
+fn the_landing_blocking_switch_is_fenced_built_and_the_cfgs_agree() {
+    const NSC: &str = include_str!("../nsc/mod.rs");
+    let end = at(NSC, "\"PRODUCTION_DESTRUCTIVE_HARNESS_FORBIDDEN: mode-production");
+    let start = NSC[..end].rfind("#[cfg(all(\n    feature = \"mode-production\",\n    any(\n").expect("fence opener");
+    assert!(NSC[start..end].contains("        feature = \"ui-px-landing-blocking\",\n"));
+    const MAKEFILE: &str = include_str!("../../../Makefile");
+    let pf = at(MAKEFILE, "override PROD_FORBIDDEN :=");
+    let pf_end = pf + MAKEFILE[pf..].find("\n\n").expect("PROD_FORBIDDEN ends");
+    assert!(MAKEFILE[pf..pf_end].split_whitespace().any(|w| w == "ui-px-landing-blocking"));
+    let sx = at(MAKEFILE, "UI_PX_SUFFIXES := \\\n");
+    let sx_end = sx + MAKEFILE[sx..].find("\nUI_PX_CONFIGS").expect("matrix ends");
+    assert!(MAKEFILE[sx..sx_end].contains("\tdebug-log,ui-px,ui-px-landing-blocking \\\n"));
+    // The hand-off and the pacing agree on `stm32u585`, and `ui-lcd` (which
+    // `px::lcd` needs) implies it.
+    let systick = body(MAIN, "fn SysTick() {");
+    assert!(systick.contains("#[cfg(all(feature = \"ui-px\", feature = \"ui-lcd\", feature = \"stm32u585\", not(feature = \"ui-px-landing-blocking\")))]\n    if crate::ui::px::lcd::landing_due("));
+    let pendsv = &MAIN[at(MAIN, "fn PendSV() {")..];
+    assert!(pendsv.contains("#[cfg(all(feature = \"ui-px\", feature = \"ui-lcd\", feature = \"stm32u585\", not(feature = \"ui-px-landing-blocking\")))]\n    if crate::ui::px::lcd::landing_live() {"));
+    let fr = body(LCD, "pub fn film_resolve(e: Ending) {");
+    assert!(fr.contains("#[cfg(all(feature = \"stm32u585\", not(feature = \"ui-px-landing-blocking\")))]\n    if matches!(e, Ending::Signed) && !hold {"));
+    assert!(LCD.contains("#[cfg(not(feature = \"stm32u585\"))]\ncompile_error!("));
+    const CARGO: &str = include_str!("../../Cargo.toml");
+    assert!(CARGO.contains("gpio-buttons = [\"stm32u585\"]") && CARGO.contains("ui-lcd = [\"spi1-arduino\", \"gpio-buttons\""));
+}

@@ -2367,8 +2367,10 @@ pub fn film_resolve(e: Ending) {
     // first landing frame and lands in the background (SysTick pends PendSV,
     // which calls `landing_step`) instead of holding the gateway for the
     // rest of the script and its 2.45 s result hold. Every other ending, and
-    // `show_ending`, still lands before returning.
-    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    // `show_ending`, still lands before returning. Same cfg as SysTick's
+    // landing pend and PendSV's landing branch (review L7): an image that
+    // could not pace the landing never hands one off.
+    #[cfg(all(feature = "stm32u585", not(feature = "ui-px-landing-blocking")))]
     if matches!(e, Ending::Signed) && !hold {
         {
             let _frame = LandingFrame::enter();
@@ -2414,6 +2416,13 @@ pub fn film_live() -> bool {
 }
 
 // ---- #1154: a Signed film lands after its sign returned --------------------
+
+// The background landing is paced by SysTick and PendSV, which exist only on
+// `stm32u585`. `ui-lcd` implies it (`gpio-buttons = ["stm32u585"]` in
+// secure/Cargo.toml); this turns breaking that implication into a build
+// error instead of a landing that is handed off and never drawn (review L7).
+#[cfg(not(feature = "stm32u585"))]
+compile_error!("ui/px/lcd.rs: `ui-lcd` must imply `stm32u585`: SysTick and PendSV pace the #1154 landing");
 //
 // The sign handlers release the signature as soon as the FI chain is done;
 // the film's remaining landing frames (spiral, flash, check, result hold)
