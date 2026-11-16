@@ -172,20 +172,78 @@ fn show_ending_lands_before_returning() {
     assert!(at(se, "LANDING_HOLD.store(true, Ordering::Relaxed);") < at(se, "film_resolve(e);"));
 }
 
-/// One owner for the glass: every other way onto the panel ends a landing
-/// before it draws.
+/// One owner for the glass: every other way onto the panel first lands a
+/// live landing (`landing_yield`) before it draws. A frame that had to land
+/// it repaints in full, since the glass no longer holds what its damage was
+/// computed against.
 #[test]
-fn every_other_draw_ends_the_landing_first() {
+fn every_other_draw_lands_the_landing_first() {
     let pfc = body(LCD, "fn present_frame_cols(");
-    let cut = at(pfc, "if !IN_LANDING_STEP.load(Ordering::Relaxed) {\n        landing_cut();\n    }");
-    assert!(cut < at(pfc, "film_reap(true);") && cut < at(pfc, "FRAME_IN_FLIGHT.swap(true"));
+    let y = at(pfc, "let (cols, bg) = if !IN_LANDING_STEP.load(Ordering::Relaxed) && landing_yield() { (None, false) } else { (cols, bg) };");
+    assert!(y < at(pfc, "film_reap(true);") && y < at(pfc, "FRAME_IN_FLIGHT.swap(true") && y < at(pfc, "let (xa, xend) = match cols {"));
     let clear = body(LCD, "pub fn clear() {");
-    assert!(at(clear, "landing_cut();") < at(clear, "lcd::fill_screen(0);"));
+    assert!(at(clear, "landing_yield();") < at(clear, "lcd::fill_screen(0);"));
     let start = body(LCD, "pub fn film_start_with(s: &Screen) {");
-    assert!(at(start, "landing_cut();") < at(start, "(*core::ptr::addr_of_mut!(FILM)).write((anim, now));"));
+    assert!(at(start, "landing_yield();") < at(start, "(*core::ptr::addr_of_mut!(FILM)).write((anim, now));"));
+    // Only a lock (`landing_yield`) and a refused atlas view (`landing_step`)
+    // cut a landing; no draw does any more (review M1).
+    assert_eq!(LCD.matches("landing_cut();").count(), 2);
+    assert!(body(LCD, "pub fn landing_yield() -> bool {").contains("landing_cut();"));
+    assert!(body(LCD, "pub fn landing_step() {").contains("landing_cut();"));
     // ANTI-VACUITY: the cut must clear the flag, not just reap.
     let lc = body(LCD, "pub fn landing_cut() {");
     assert!(lc.contains("if LANDING_SET.swap(false, Ordering::AcqRel) {"));
+}
+
+/// Review M1: the non-secure world gets the signature at once, but it cannot
+/// put the next dialog over SIGNED. Every input dialog plays the live
+/// landing out (through the check and its result hold, input-dead) BEFORE
+/// it samples a single edge; only a lock cuts it.
+#[test]
+fn a_dialog_cannot_start_before_the_live_landing_has_shown_the_check() {
+    // The three input dialogs: the yield precedes sampling and the FSM's
+    // level seed, so presses made while SIGNED played never reach them.
+    let rf = body(LCD, "pub fn run_flow(");
+    assert!(at(rf, "landing_yield();") < at(rf, "sampling_enable();") && at(rf, "landing_yield();") < at(rf, "InputFsm::resumed("));
+    let rp = body(LCD, "pub fn run_pager(");
+    assert!(at(rp, "landing_yield();") < at(rp, "carry_take()") && at(rp, "landing_yield();") < at(rp, "sampling_enable();"));
+    let sy = body(LCD, "    fn sync(&mut self) {");
+    assert!(at(sy, "landing_yield();") < at(sy, "sampling_enable();"));
+    // ...and they are the only samplers: a new one would need its own yield.
+    assert_eq!(LCD.matches("sampling_enable();").count(), 3);
+    // An earlier landing lands before a resolve reuses `FILM`.
+    let fr = body(LCD, "pub fn film_resolve(e: Ending) {");
+    assert!(at(fr, "landing_yield();") < at(fr, "let hold = LANDING_HOLD.swap(false, Ordering::Relaxed);"));
+
+    // The yield lands unless the device is locked, and never consults the
+    // landing-frame flag (review L4: a stuck flag must not skip it).
+    let y = body(LCD, "pub fn landing_yield() -> bool {");
+    let locked = at(y, "if crate::nsc::is_definitely_locked() {\n        landing_cut();\n        return false;\n    }");
+    assert!(at(y, "if !landing_live() {") < locked && locked < at(y, "landing_finish();"));
+    assert!(!y.contains("IN_LANDING_STEP"));
+
+    // The finish plays to the end of the script: the blocking loop, left
+    // only through `film_done`, busy for the watchdog, on the film view.
+    let f = body(LCD, "fn landing_finish() {");
+    let lp = at(f, "        loop {\n");
+    let done = at(f, "            if anim.film_done(t) {\n                break;\n            }");
+    assert!(lp < done);
+    let looped = &f[lp..done];
+    assert!(looped.contains("let _ = build_and_present(anim, &marks, &font, None, None, None);"));
+    for exit in ["return", "break", "is_idle", "ring_has_edges", "drain(", "sampling_enable"] {
+        assert!(!looped.contains(exit), "nothing may leave or read input inside the finish loop: `{exit}`");
+    }
+    assert!(at(f, "if !LANDING_SET.swap(false, Ordering::AcqRel) {") < lp);
+    assert!(at(f, "let _busy = crate::nsc::HandlerGuard::enter();") < lp);
+    assert!(f.contains("assets::atlas_film_frame()") && !f.contains("atlas_verified"));
+
+    // ANTI-VACUITY: `film_done` really waits for the check (T7) and its hold.
+    const LOADING: &str = include_str!("../../../pqsigner-ui-px/src/loading.rs");
+    assert!(LOADING.contains("self.ready.is_some() && self.film_t(now) >= T7 + RESULT_HOLD_MS"));
+    assert!(LOADING.contains("pub const RESULT_HOLD_MS: u32 = 2450;"));
+    // ...and `HandlerGuard` really is the busy count the watchdog reads.
+    const NSC: &str = include_str!("../nsc/mod.rs");
+    assert!(NSC.contains("HANDLER_DEPTH.fetch_add(1, core::sync::atomic::Ordering::SeqCst);"));
 }
 
 /// Landing frames read the film view, as the blocking landing's frames did:
@@ -296,9 +354,9 @@ fn landing_frames_leave_the_non_secure_world_a_gap() {
 fn the_glyph_blitter_ends_the_landing_too() {
     const DISPLAY: &str = include_str!("../ui/lcd.rs");
     let fl = body(DISPLAY, "    pub fn flush(&mut self) {");
-    assert!(at(fl, "crate::ui::px::lcd::landing_cut();") < at(fl, "self.blit_glyph(c, r, &cols);"));
+    assert!(at(fl, "crate::ui::px::lcd::landing_yield();") < at(fl, "self.blit_glyph(c, r, &cols);"));
     let fs = body(DISPLAY, "    pub fn flush_with_secret_rows(&mut self, secret_rows: &[(usize, &[u8])]) {");
-    assert!(at(fs, "crate::ui::px::lcd::landing_cut();") < at(fs, "self.blit_glyph("));
+    assert!(at(fs, "crate::ui::px::lcd::landing_yield();") < at(fs, "self.blit_glyph("));
 }
 
 /// A lock during a landing that is NOT the idle wipe (CMD_LOCK zeroizes, then

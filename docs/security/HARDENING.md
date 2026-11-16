@@ -292,6 +292,25 @@ catalogue (`handoff/catalog/actions/{hold-right-sign,unbound-gestures,
 tap-navigate}.md`) still describes the reference grammar; a device-deviation
 note for those pages is proposed upstream (see `tools/pq-ui/UPSTREAM.txt`).
 
+**UPDATE 2026-11-16 (#1154).** The Signed film no longer holds the sign call.
+The handler returns the released signature at once, and the rest of the
+landing (spiral, flash, check, `RESULT_HOLD_MS`) is drawn afterwards, one
+frame at a time from PendSV while no gateway call is in progress. The
+**input-dead** row above still holds for it, because nothing else can take
+the glass while the landing is live (review M1). Every input dialog
+(`run_flow`, `run_pager`, `lcd::EntryInput`) and every other draw first plays
+the rest of the landing synchronously, input-dead, through the check and its
+hold (`lcd::landing_yield` → `landing_finish`), before it samples a single
+edge. So the non-secure world gets the signature early but cannot put the
+next consent screen, or any other screen, over SIGNED. Only a lock cuts the
+landing: `CMD_LOCK`, which zeroizes before it draws "Locked", and the idle
+wipe, which locks before its PIN prompt. The finish counts as a busy handler
+for the watchdog and the idle wipe, as the in-handler landing did. The
+evidence is source pins with mutation controls
+(`secure/src/display_under_test/film_landing_pure_tests.rs`); no CI step runs
+the landing (QEMU builds compile it out), and it has not been measured on
+silicon.
+
 ## 3. SE050 Configuration
 
 ### 3.1 Authentication Object

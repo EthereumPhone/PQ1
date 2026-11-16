@@ -553,12 +553,13 @@ const BAND_RENDER_CYC: u32 = 240_000;
 /// unchanged ([`pqsigner_ui_px::damage`]). A partial frame is never
 /// `complete`: it does not count as "this screen was presented".
 fn present_frame_cols(frame: &Frame<'_>, font: &Font<'_>, _force: bool, cols: Option<(i32, i32)>, bg: bool) -> FrameCost {
-    // #1154: a Signed film still landing after its sign returned owns the
-    // glass only until anything else draws; that draw ends the landing here.
+    // #1154 (review M1): a Signed film still landing after its sign returned
+    // owns the glass until it has landed. Any other draw first plays the
+    // rest of it, or cuts it on a locked device (`landing_yield`). If that
+    // drew, the glass no longer holds what this frame's damage was computed
+    // against, so the frame repaints in full.
     #[cfg(not(feature = "ui-px-landing-blocking"))]
-    if !IN_LANDING_STEP.load(Ordering::Relaxed) {
-        landing_cut();
-    }
+    let (cols, bg) = if !IN_LANDING_STEP.load(Ordering::Relaxed) && landing_yield() { (None, false) } else { (cols, bg) };
     // `complete` stays false through every early exit below: the latch, the
     // band-0 `Strip::new` failure, and the mid-loop `break`.
     let mut cost = FrameCost::default();
@@ -1427,7 +1428,7 @@ pub fn paint_legacy(rows: &[[u8; crate::ui::DISPLAY_COLS]; crate::ui::DISPLAY_RO
 /// Clear the panel (before the legacy glyph blitter paints again).
 pub fn clear() {
     #[cfg(not(feature = "ui-px-landing-blocking"))]
-    landing_cut();
+    landing_yield();
     lcd::fill_screen(0);
 }
 
@@ -1543,9 +1544,9 @@ pub fn film_start() {
 /// status record whose disc seeds the qubits and whose caption breathes
 /// over the orbit (GENERATING KEYS, WIPING, …).
 pub fn film_start_with(s: &Screen) {
-    // #1154: the landing film lives in `FILM`; end it before a new film.
+    // #1154: the landing film lives in `FILM`; it lands before a new film.
     #[cfg(not(feature = "ui-px-landing-blocking"))]
-    landing_cut();
+    landing_yield();
     let Some(atlas) = assets::atlas_verified() else {
         return;
     };
@@ -2322,6 +2323,10 @@ fn film_tick_due(back_to_back: bool, _src: u8) {
 /// film running — play the film-less resolve. Returns when the result has
 /// held `RESULT_HOLD_MS`; the resting frame stays on the glass.
 pub fn film_resolve(e: Ending) {
+    // An earlier Signed landing still live plays out first: this resolve
+    // reuses `FILM` and paints a new ending (review M1/L4).
+    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    landing_yield();
     #[cfg(not(feature = "ui-px-landing-blocking"))]
     let hold = LANDING_HOLD.swap(false, Ordering::Relaxed);
     let Some(atlas) = assets::atlas_verified() else {
@@ -2417,9 +2422,18 @@ pub fn film_live() -> bool {
 // its thread mode, below PendSV) always gets at least that long between
 // frames. PendSV draws only while no gateway call is in progress.
 //
-// One owner for the glass: any other draw (`present_frame_cols` outside a
-// landing step, `clear`, `film_start_with`) ends the landing first, and the
-// sign handlers' closing "Ready" waits for it (`landing_defer_ready`).
+// One owner for the glass, and the verdict is never skipped (review M1):
+// anything else about to draw (`present_frame_cols` outside a landing
+// frame, `clear`, `film_start_with`, the glyph blitter) and every input
+// dialog, before it samples a single edge (`run_flow`, `run_pager`,
+// `EntryInput`), first plays the rest of the landing synchronously, through
+// the check and its result hold, input-dead, as the sign handler did before
+// #1154 (`landing_yield` -> `landing_finish`). So the non-secure world can
+// return the signature early but cannot put the next consent screen, or
+// any other screen, over SIGNED. Only a lock cuts the landing (CMD_LOCK
+// zeroizes before it draws; the idle wipe locks before its PIN prompt).
+// The sign handlers' closing "Ready" waits for the landing
+// (`landing_defer_ready`).
 //
 // The atlas: `film_resolve` verifies it (`atlas_verified`) before the first
 // landing frame, and every later landing frame reads the same view the
@@ -2568,8 +2582,77 @@ fn ready_at_rest(atlas: &assets::AtlasRef) {
     }
 }
 
-/// End a landing where it stands (another draw takes the glass). The flag
-/// is cleared before the reap, so a draw the reap makes is not a cut.
+/// Anything about to take the glass while a Signed landing is live calls
+/// this first (review M1). Unlocked: the rest of the landing plays here
+/// ([`landing_finish`]), so SIGNED and its check are always shown before
+/// the next screen. Locked (CMD_LOCK zeroized before drawing "Locked"; the
+/// idle wipe before its PIN prompt): the landing is cut. `true` = it drew,
+/// so the glass no longer holds what the caller last drew.
+///
+/// Deliberately ignores `IN_LANDING_STEP` (review L4): every caller is a
+/// dialog entry or a draw outside a landing frame, and a stuck flag must
+/// not carry a landing past a dialog. `present_frame_cols` checks the flag
+/// itself, because landing frames draw through it.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+pub fn landing_yield() -> bool {
+    if !landing_live() {
+        return false;
+    }
+    if crate::nsc::is_definitely_locked() {
+        landing_cut();
+        return false;
+    }
+    landing_finish();
+    true
+}
+
+/// Play the rest of a live landing here, synchronously, through the check
+/// and its `RESULT_HOLD_MS` hold, and end it: what the sign handler did
+/// before it returned until #1154 (the same loop as `film_resolve`'s
+/// blocking landing). Input-dead: nothing samples the buttons while it
+/// plays, and every input dialog calls this before `sampling_enable`.
+///
+/// Up to about 5 s of landing can remain. That is longer than the
+/// watchdog's 4 s no-progress budget for a short, non-busy gateway call, so
+/// the finish counts as busy (`HandlerGuard`), as the in-handler landing
+/// did; the idle wipe defers for it the same way (bounded by #981).
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+fn landing_finish() {
+    // Take the landing: once this is clear no landing step reads `FILM`.
+    if !LANDING_SET.swap(false, Ordering::AcqRel) {
+        return;
+    }
+    // A screen follows at once; the deferred Ready would only flash under it.
+    LANDING_THEN_READY.store(false, Ordering::Relaxed);
+    let Some(atlas) = assets::atlas_film_frame() else {
+        film_reap(true);
+        return;
+    };
+    let _busy = crate::nsc::HandlerGuard::enter();
+    // SAFETY: `LANDING_SET` was true, so `film_resolve` wrote the slot;
+    // clearing it above made this the slot's only reader, and `FILM_SET` is
+    // false, so no busy-film tick reads it either. Single-threaded driver
+    // state otherwise.
+    let anim = unsafe { &mut (*core::ptr::addr_of_mut!(FILM)).assume_init_mut().0 };
+    let marks = atlas.marks();
+    let font = atlas.font();
+    {
+        let _frame = LandingFrame::enter();
+        loop {
+            let t = timeout::now();
+            anim.step(t);
+            let _ = build_and_present(anim, &marks, &font, None, None, None);
+            if anim.film_done(t) {
+                break;
+            }
+        }
+        film_reap(true);
+    }
+    LANDING_LAST_MS.store(timeout::now(), Ordering::Relaxed);
+}
+
+/// End a landing where it stands (only a lock does: `landing_yield`). The
+/// flag is cleared before the reap, so a draw the reap makes is not a cut.
 #[cfg(not(feature = "ui-px-landing-blocking"))]
 pub fn landing_cut() {
     if LANDING_SET.swap(false, Ordering::AcqRel) {
@@ -3251,6 +3334,13 @@ pub fn run_flow(screens: &Screens, atlas: &assets::AtlasRef, deadline_expired: &
     if deadline_expired() {
         return (PxOutcome::DeadlineExpired, crate::fi::FAIL_SENTINEL);
     }
+    // #1154 (review M1): a Signed landing still live from the previous sign
+    // plays out here, through the check and its hold, input-dead, BEFORE
+    // this dialog samples a single edge. It must precede `sampling_enable`
+    // and the FSM's level seed below, or presses made while the user
+    // watched SIGNED would reach this dialog.
+    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    landing_yield();
     // A busy film (key generation before the dialog) ends here; the sign
     // starts its own film after the consent.
     film_abort();
@@ -3570,6 +3660,10 @@ pub fn run_pager(
     use crate::ui::PagerOut;
     let n = screens.len();
     let mut i = start.min(n.saturating_sub(1));
+    // #1154 (review M1): as `run_flow`, a live landing plays out before this
+    // pager samples an edge (and before `carry_take` reads the glass).
+    #[cfg(not(feature = "ui-px-landing-blocking"))]
+    landing_yield();
     film_abort();
     let marks = atlas.marks();
     let font = atlas.font();
@@ -3717,6 +3811,10 @@ impl EntryInput {
     }
 
     fn sync(&mut self) {
+        // #1154 (review M1): as `run_flow`, a live landing plays out before
+        // this entry wait samples an edge.
+        #[cfg(not(feature = "ui-px-landing-blocking"))]
+        landing_yield();
         sampling_enable();
         let sb = stable_bits();
         self.fsm = InputFsm::resumed(InputCtx::NAV, sb & 1 != 0, sb & 2 != 0);

@@ -161,9 +161,9 @@ impl Display {
             return;
         }
         // #1154: the glyph blitter writes the panel directly; a background
-        // film landing must not draw over it.
+        // film landing plays out first, and must not draw over it after.
         #[cfg(all(feature = "ui-px", not(feature = "ui-px-landing-blocking")))]
-        crate::ui::px::lcd::landing_cut();
+        crate::ui::px::lcd::landing_yield();
         for r in 0..DISPLAY_ROWS {
             for c in 0..DISPLAY_COLS {
                 let ch = self.rows[r][c];
@@ -182,9 +182,9 @@ impl Display {
     /// `secret_rows`: `(row, text)` pairs; `row` in 0..DISPLAY_ROWS, `text` is
     /// the ASCII bytes for that row (already space-padded by the caller).
     pub fn flush_with_secret_rows(&mut self, secret_rows: &[(usize, &[u8])]) {
-        // #1154: as `flush` — no film landing draws over these rows.
+        // #1154: as `flush` — a film landing plays out first, never over these rows.
         #[cfg(all(feature = "ui-px", not(feature = "ui-px-landing-blocking")))]
-        crate::ui::px::lcd::landing_cut();
+        crate::ui::px::lcd::landing_yield();
         // No full-screen clear (see `flush`): every cell — including the secret
         // rows' — is fully overwritten, so there's no stale-content leak and the
         // constant-time write pattern is preserved (overwrite, not OR-accumulate).

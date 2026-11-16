@@ -405,6 +405,10 @@ confirm through the pixel UI too; see the plan's step 3.
 2. ~~**Endings during the sign**~~ — done 2026-09-23 (port plan step 1): the qubit loading film (`pqsigner_ui_px::loading`,
    `ui::px::lcd::film_*`) plays around the sign, paced by the signer's
    progress hook, and lands with the design's `RESULT_HOLD_MS`.
+   **UPDATE 2026-11-16 (#1154):** a Signed film now lands after the sign has
+   returned its signature. Any next screen, and every input dialog before it
+   samples an edge, first plays the landing out through the check and its
+   hold; only a lock cuts it. See `docs/security/HARDENING.md` §2.4.
 3. ~~**Native trailer screens**~~ — done 2026-09-23 (`tx/display/
    trailer_screens.rs`, eleven slots with per-slot + set proofs; the
    `Legacy` kind is unused on every pixel route, which since step 2 includes
