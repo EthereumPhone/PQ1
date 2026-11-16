@@ -57,7 +57,7 @@ fn redacted(s: &Screen) -> Screen {
 
 /// Log / fingerprint a non-dialog screen (`[UI-PXS]` so the sign-dialog
 /// transcript counts are untouched).
-fn record(s: &Screen) {
+pub(super) fn record(s: &Screen) {
     let r = redacted(s);
     #[cfg(feature = "debug-log")]
     {

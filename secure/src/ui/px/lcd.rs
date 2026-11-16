@@ -2516,8 +2516,25 @@ pub fn landing_step() {
     if done {
         LANDING_SET.store(false, Ordering::Release);
         if LANDING_THEN_READY.swap(false, Ordering::Relaxed) {
-            crate::ui::show_status("PQSigner OS", "Ready");
+            ready_at_rest(&atlas);
         }
+    }
+}
+
+/// The sign handler's deferred "Ready" (`landing_defer_ready`): the idle
+/// screen's resting frame, painted ONCE from the landing's film view.
+///
+/// Not `ui::show_status`: that plays the idle entrance through
+/// `play_screen` for up to `PLAY_CAP_MS` (3 s), and here it would run at
+/// PendSV priority, above every non-secure exception, as one continuous
+/// non-secure blackout counted against the watchdog's 4 s no-progress
+/// budget (review L6). It would also re-copy and re-hash the atlas there
+/// (`show_with` -> `verify_atlas`, L1/L2). One frame bounds the step.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+fn ready_at_rest(atlas: &assets::AtlasRef) {
+    if let super::status_map::Status::Show(s) = super::status_map::classify("PQSigner OS", "Ready") {
+        super::screens::record(&s);
+        paint_rest(&s, atlas);
     }
 }
 

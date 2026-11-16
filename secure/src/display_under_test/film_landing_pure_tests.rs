@@ -225,9 +225,31 @@ fn landing_frames_use_the_film_view_and_finish_before_returning() {
 #[test]
 fn ready_is_drawn_after_the_landing_ends() {
     let ls = body(LCD, "pub fn landing_step() {");
-    assert!(at(ls, "LANDING_SET.store(false, Ordering::Release);") < at(ls, "crate::ui::show_status(\"PQSigner OS\", \"Ready\");"));
+    assert!(at(ls, "LANDING_SET.store(false, Ordering::Release);") < at(ls, "ready_at_rest(&atlas);"));
     let ss = body(UI_MOD, "pub fn show_status(title: &str, sub: &str) {");
     assert!(ss.contains("if title == \"PQSigner OS\" && sub == \"Ready\" && px::lcd::landing_defer_ready() {\n        return;\n    }"));
+}
+
+/// The deferred Ready runs inside a landing step (PendSV, above every
+/// non-secure exception). It paints ONE resting frame from the landing's
+/// film view (review L6): `show_status` would play the idle entrance for up
+/// to `PLAY_CAP_MS` there, a continuous non-secure blackout of up to 3 s
+/// against the watchdog's 4 s budget, and re-verify the atlas.
+#[test]
+fn the_deferred_ready_is_one_resting_frame() {
+    let ls = body(LCD, "pub fn landing_step() {");
+    assert!(!ls.contains("show_status("), "the landing step must not run a status screen's entrance");
+    let rr = body(LCD, "fn ready_at_rest(atlas: &assets::AtlasRef) {");
+    assert!(rr.contains("paint_rest(&s, atlas);"));
+    for long in ["play_screen", "show_status", "show_with", "verify_atlas", "atlas_verified"] {
+        assert!(!rr.contains(long), "the deferred Ready must not call `{long}`");
+    }
+    assert!(rr.contains("classify(\"PQSigner OS\", \"Ready\")"));
+    // ANTI-VACUITY: `paint_rest` settles on synthetic time and draws once.
+    let pr = body(LCD, "pub fn paint_rest(s: &Screen, atlas: &assets::AtlasRef) {");
+    assert!(pr.contains("while anim.step(t) && t < PLAY_CAP_MS {\n        t += 16;\n    }"));
+    assert_eq!(pr.matches("build_and_present(").count(), 1);
+    assert!(!pr.contains("wfi"));
 }
 
 /// PendSV draws a landing frame only with the gateway gate taken by itself
