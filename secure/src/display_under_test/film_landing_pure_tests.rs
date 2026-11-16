@@ -425,3 +425,28 @@ fn back_to_back_gateway_calls_cannot_freeze_the_landing() {
     let ls = body(LCD, "pub fn landing_step() {");
     assert!(at(ls, "if !landing_due(timeout::now()) {\n        return;\n    }") < at(ls, "anim.step(now);"));
 }
+
+/// Review L3: PendSV now also runs for landing frames, so it must not infer
+/// "the idle wipe asked for a re-unlock" from "the device is locked". The
+/// idle wipe records the request right before it pends PendSV, and PendSV
+/// runs the PIN re-unlock only after swap-clearing it, so a stray pend on a
+/// locked device returns instead of opening an unsolicited PIN prompt.
+#[test]
+fn the_pin_reunlock_runs_only_when_the_idle_wipe_asked() {
+    let systick = body(MAIN, "fn SysTick() {");
+    let idle = at(systick, "if timeout::is_idle() && !nsc::handler_is_busy() && !nsc::is_definitely_locked() {");
+    let arm = &systick[idle..];
+    let req = at(arm, "REUNLOCK_REQUESTED.store(true, core::sync::atomic::Ordering::Release);");
+    let pend = at(arm, "ARCH.icsr.write(1 << 28); // PENDSVSET");
+    assert!(at(arm, "nsc::zeroize_sensitive_state();") < req && req < pend);
+    // The landing pend (later in SysTick) does not set it.
+    assert_eq!(MAIN.matches("REUNLOCK_REQUESTED.store(true").count(), 1);
+    let pendsv = &MAIN[at(MAIN, "fn PendSV() {")..];
+    let landing = at(pendsv, "if crate::ui::px::lcd::landing_live() {");
+    let swap = at(pendsv, "if !REUNLOCK_REQUESTED.swap(false, core::sync::atomic::Ordering::AcqRel) {");
+    let reunlock = at(pendsv, "enter_pin()");
+    assert!(landing < swap && swap < at(pendsv, "if nsc::is_unlocked() {") && swap < reunlock);
+    // The refused branch clears the re-entry flag and returns.
+    let refused = &pendsv[swap..at(pendsv, "if nsc::is_unlocked() {")];
+    assert!(refused.contains("core::ptr::write_volatile(core::ptr::addr_of_mut!(PENDSV_IN_FLIGHT), 0);") && refused.contains("return;"));
+}

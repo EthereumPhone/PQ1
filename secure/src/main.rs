@@ -5304,6 +5304,11 @@ fn SysTick() {
         // PendSV drives the PIN entry screen directly — no intermediate
         // "(idle wipe)" status page, which could otherwise get stuck
         // visible if PendSV is delayed.
+        //
+        // #1154 review L3: say WHY PendSV is pended. It now also runs for
+        // landing frames, so it must not infer "re-unlock" from "locked".
+        #[cfg(all(feature = "ui-px", feature = "ui-lcd", feature = "stm32u585", not(feature = "ui-px-landing-blocking")))]
+        REUNLOCK_REQUESTED.store(true, core::sync::atomic::Ordering::Release);
         #[cfg(feature = "stm32u585")]
         ARCH.icsr.write(1 << 28); // PENDSVSET
     }
@@ -5425,6 +5430,17 @@ unsafe fn DefaultHandler(irqn: i16) {
 
 #[cfg(all(not(test), feature = "stm32u585"))]
 static mut PENDSV_IN_FLIGHT: u32 = 0;
+
+/// #1154 review L3: set by SysTick's idle wipe, immediately before it pends
+/// PendSV for the PIN re-unlock, and swap-cleared by PendSV, which runs the
+/// re-unlock only when it reads `true`. PendSV is also pended for landing
+/// frames now, and inferring "the idle wipe asked" from "the device is
+/// locked" made a stray pend (a forced PENDSVSET, a skipped return) on a
+/// locked device open a PIN prompt nobody asked for, holding the gate and
+/// starving the non-secure world until a PIN was entered.
+/// Only where landings exist (the rest of PendSV's callers are unchanged).
+#[cfg(all(not(test), feature = "ui-px", feature = "ui-lcd", feature = "stm32u585", not(feature = "ui-px-landing-blocking")))]
+static REUNLOCK_REQUESTED: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 /// Hard cap on SUBMITTED PINs within a single PendSV entry. Prompts that
 /// end with no PIN (idle, cancel) are not counted: an idle prompt stays up
@@ -5552,6 +5568,17 @@ fn PendSV() {
             }
             return;
         }
+    }
+
+    // #1154 review L3: only the idle wipe's request runs the re-unlock
+    // (`REUNLOCK_REQUESTED`), not any PendSV that finds the device locked.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd", feature = "stm32u585", not(feature = "ui-px-landing-blocking")))]
+    if !REUNLOCK_REQUESTED.swap(false, core::sync::atomic::Ordering::AcqRel) {
+        // SAFETY: the single-core re-entry flag, as below.
+        unsafe {
+            core::ptr::write_volatile(core::ptr::addr_of_mut!(PENDSV_IN_FLIGHT), 0);
+        }
+        return;
     }
 
     // Only run if we're actually locked (avoids spurious re-entry)
