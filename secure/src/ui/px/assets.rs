@@ -201,6 +201,13 @@ pub fn atlas_verified() -> Option<AtlasRef> {
 /// (`film_resolve`) — the same verify-before-and-after bracket the sign
 /// dialogs use. Refused for ever once any verification has failed.
 ///
+/// Also the Signed film's landing frames after the sign returned (#1154),
+/// drawn from PendSV or a later gateway call: `film_resolve`'s verify opens
+/// that window and the next dialog's verify closes it. The non-secure world
+/// runs inside it, which is sound only because the bytes are this secure
+/// SRAM3 copy (#1133), written by [`load_copy`] alone, never non-secure
+/// flash.
+///
 /// The film is an orbit animation and a fixed caption; it carries nothing
 /// the user authorises. NEVER use this for a paint that does.
 pub fn atlas_film_frame() -> Option<AtlasRef> {

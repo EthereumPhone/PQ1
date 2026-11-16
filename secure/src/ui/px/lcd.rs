@@ -2420,9 +2420,16 @@ pub fn film_live() -> bool {
 // landing step, `clear`, `film_start_with`) ends the landing first, and the
 // sign handlers' closing "Ready" waits for it (`landing_defer_ready`).
 //
-// The atlas lives in non-secure flash and the non-secure world runs between
-// landing frames, so every landing frame re-verifies it (`atlas_verified`,
-// not the in-film `atlas_film_frame`) and the landing stops on a mismatch.
+// The atlas: `film_resolve` verifies it (`atlas_verified`) before the first
+// landing frame, and every later landing frame reads the same view the
+// blocking landing drew all its frames from, `atlas_film_frame` — no copy,
+// no hash. That is sound although the non-secure world now runs between
+// frames: since #1133 every paint reads the secure SRAM3 copy, which only
+// `assets::load_copy` writes, so non-secure code cannot change the bytes a
+// landing frame reads; and `atlas_film_frame` refuses (the landing is cut)
+// once any verification has failed. Re-verifying per frame instead cost a
+// 75 KB copy and hash at PendSV priority on every frame, which
+// `atlas_verified` itself says is not for animation frames.
 // Landing frames are synchronous (`film_bg_allowed`): when PendSV returns,
 // no band stream is in flight and the band buffers are wiped.
 //
@@ -2483,7 +2490,9 @@ pub fn landing_step() {
     if !landing_due(timeout::now()) {
         return;
     }
-    let Some(atlas) = assets::atlas_verified() else {
+    // The film view (#1154 header): `film_resolve` verified this copy, and
+    // only the secure world writes it. Refused once a verify failed.
+    let Some(atlas) = assets::atlas_film_frame() else {
         landing_cut();
         return;
     };

@@ -188,14 +188,29 @@ fn every_other_draw_ends_the_landing_first() {
     assert!(lc.contains("if LANDING_SET.swap(false, Ordering::AcqRel) {"));
 }
 
-/// The non-secure world runs between landing frames and owns the atlas
-/// flash, so every landing frame re-verifies it; and no landing frame is
-/// left streaming (or its band buffers unwiped) when PendSV returns.
+/// Landing frames read the film view, as the blocking landing's frames did:
+/// `film_resolve` verified the secure SRAM3 copy, and only the secure world
+/// writes it (#1133), so the non-secure world running between frames cannot
+/// change what they read. A per-frame `atlas_verified` would copy and hash
+/// 75 KB at PendSV priority on every frame (review L1), and `load_copy`
+/// would rewrite the copy under any view a preempted context still holds
+/// (L2). The landing is cut, not drawn, once any verify has failed. And no
+/// landing frame is left streaming (or its band buffers unwiped) when
+/// PendSV returns.
 #[test]
-fn landing_frames_reverify_the_atlas_and_finish_before_returning() {
+fn landing_frames_use_the_film_view_and_finish_before_returning() {
     let ls = body(LCD, "pub fn landing_step() {");
-    assert!(ls.contains("let Some(atlas) = assets::atlas_verified() else {\n        landing_cut();\n        return;\n    };"));
-    assert!(!ls.contains("atlas_film_frame"), "the in-film unverified view is unsound between landing frames");
+    assert!(ls.contains("let Some(atlas) = assets::atlas_film_frame() else {\n        landing_cut();\n        return;\n    };"));
+    for per_frame in ["atlas_verified", "verify_atlas", "load_copy"] {
+        assert!(!ls.contains(per_frame), "a landing frame must not re-copy or re-hash the atlas (`{per_frame}`)");
+    }
+    // ANTI-VACUITY: the view refuses once a verify failed, and the bracket
+    // opens with a real verify in `film_resolve`.
+    const ASSETS: &str = include_str!("../ui/px/assets.rs");
+    let ff = body(ASSETS, "pub fn atlas_film_frame() -> Option<AtlasRef> {");
+    assert!(ff.contains("BOOT_OK => Atlas::parse(window()).map(|atlas| AtlasRef { atlas }),\n        _ => None,"));
+    let fr = body(LCD, "pub fn film_resolve(e: Ending) {");
+    assert!(fr.contains("let Some(atlas) = assets::atlas_verified() else {"));
     assert!(ls.contains("film_reap(true);"));
     let bg = body(LCD, "fn film_bg_allowed() -> bool {");
     assert!(
@@ -243,7 +258,7 @@ fn pendsv_draws_a_landing_frame_only_between_gateway_calls() {
 fn landing_frames_leave_the_non_secure_world_a_gap() {
     let ls = body(LCD, "pub fn landing_step() {");
     let due = at(ls, "if !landing_due(timeout::now()) {\n        return;\n    }");
-    assert!(due < at(ls, "assets::atlas_verified()") && due < at(ls, "anim.step(now);"));
+    assert!(due < at(ls, "assets::atlas_film_frame()") && due < at(ls, "anim.step(now);"));
     // The gap starts after the frame (and its reap), not before it.
     assert!(at(ls, "film_reap(true);") < at(ls, "LANDING_LAST_MS.store(timeout::now(), Ordering::Relaxed);"));
     let ld = body(LCD, "pub fn landing_due(now: u32) -> bool {");
