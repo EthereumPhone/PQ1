@@ -226,6 +226,9 @@ fn landing_frames_use_the_film_view_and_finish_before_returning() {
 fn ready_is_drawn_after_the_landing_ends() {
     let ls = body(LCD, "pub fn landing_step() {");
     assert!(at(ls, "LANDING_SET.store(false, Ordering::Release);") < at(ls, "ready_at_rest(&atlas);"));
+    // ...and never over a locked device (review L5), through the
+    // fail-closed predicate, not `!is_definitely_locked()`.
+    assert!(ls.contains("if LANDING_THEN_READY.swap(false, Ordering::Relaxed) && crate::nsc::is_unlocked() {\n            ready_at_rest(&atlas);"));
     let ss = body(UI_MOD, "pub fn show_status(title: &str, sub: &str) {");
     assert!(ss.contains("if title == \"PQSigner OS\" && sub == \"Ready\" && px::lcd::landing_defer_ready() {\n        return;\n    }"));
 }

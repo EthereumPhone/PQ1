@@ -2515,7 +2515,10 @@ pub fn landing_step() {
     LANDING_LAST_MS.store(timeout::now(), Ordering::Relaxed);
     if done {
         LANDING_SET.store(false, Ordering::Release);
-        if LANDING_THEN_READY.swap(false, Ordering::Relaxed) {
+        // Never READY over a locked device (review L5): the idle wipe can
+        // lock while this frame draws, and its PIN prompt follows. The
+        // FI-checked predicate fails closed: a torn lock state skips Ready.
+        if LANDING_THEN_READY.swap(false, Ordering::Relaxed) && crate::nsc::is_unlocked() {
             ready_at_rest(&atlas);
         }
     }
