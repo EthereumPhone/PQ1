@@ -2516,7 +2516,8 @@ pub fn landing_defer() {
     LANDING_LAST_MS.store(timeout::now(), Ordering::Relaxed);
 }
 
-/// PendSV, with no gateway call in progress: draw the next landing frame.
+/// Draw the next landing frame: from PendSV while no gateway call is in
+/// progress, or at the entry of a gateway call (`landing_gateway_tick`).
 /// When the film has landed and held, the resting frame is drawn in full,
 /// the landing ends, and a deferred "Ready" is drawn.
 #[cfg(not(feature = "ui-px-landing-blocking"))]
@@ -2537,8 +2538,11 @@ pub fn landing_step() {
     };
     let now = timeout::now();
     // SAFETY: `LANDING_SET` says `film_resolve` wrote the slot; single-
-    // threaded driver state (PendSV with no gateway call is the only caller,
-    // and nothing else reads `FILM` while `FILM_SET` is false).
+    // threaded driver state. The two callers never overlap: PendSV draws
+    // only with the gateway gate it took itself (no call in progress), and
+    // `landing_gateway_tick` runs inside a call that holds the gate, where a
+    // preempting PendSV only defers. Nothing else reads `FILM` while
+    // `FILM_SET` is false.
     let anim = unsafe { &mut (*core::ptr::addr_of_mut!(FILM)).assume_init_mut().0 };
     let done = {
         let _frame = LandingFrame::enter();
@@ -2580,6 +2584,31 @@ fn ready_at_rest(atlas: &assets::AtlasRef) {
         super::screens::record(&s);
         paint_rest(&s, atlas);
     }
+}
+
+/// Every gateway call, first thing (`nsc::fi_boundary`, before the command
+/// and before its FI-delay accounting starts): draw the next landing frame
+/// if one is due (review M1, second half).
+///
+/// PendSV draws only while no gateway call is in progress, and the
+/// non-secure world decides that: back-to-back short calls (status polls)
+/// that keep the gate held made every PendSV defer, freezing the landing
+/// mid-orbit, which looks like signing still in progress while the
+/// companion already has the signature. Here a due frame is drawn in thread
+/// mode, inside this call's own gate, before its command runs. So the
+/// landing advances by at least one frame per due call, and by at most one
+/// (`landing_step`'s gap check). A locked device cuts instead.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+#[inline(never)]
+pub fn landing_gateway_tick() {
+    if !landing_due(timeout::now()) {
+        return;
+    }
+    if crate::nsc::is_definitely_locked() {
+        landing_cut();
+        return;
+    }
+    landing_step();
 }
 
 /// Anything about to take the glass while a Signed landing is live calls

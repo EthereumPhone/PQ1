@@ -185,11 +185,13 @@ fn every_other_draw_lands_the_landing_first() {
     assert!(at(clear, "landing_yield();") < at(clear, "lcd::fill_screen(0);"));
     let start = body(LCD, "pub fn film_start_with(s: &Screen) {");
     assert!(at(start, "landing_yield();") < at(start, "(*core::ptr::addr_of_mut!(FILM)).write((anim, now));"));
-    // Only a lock (`landing_yield`) and a refused atlas view (`landing_step`)
-    // cut a landing; no draw does any more (review M1).
-    assert_eq!(LCD.matches("landing_cut();").count(), 2);
+    // Only a lock (`landing_yield`, `landing_gateway_tick`) and a refused
+    // atlas view (`landing_step`) cut a landing; no draw does any more
+    // (review M1).
+    assert_eq!(LCD.matches("landing_cut();").count(), 3);
     assert!(body(LCD, "pub fn landing_yield() -> bool {").contains("landing_cut();"));
     assert!(body(LCD, "pub fn landing_step() {").contains("landing_cut();"));
+    assert!(body(LCD, "pub fn landing_gateway_tick() {").contains("if crate::nsc::is_definitely_locked() {\n        landing_cut();"));
     // ANTI-VACUITY: the cut must clear the flag, not just reap.
     let lc = body(LCD, "pub fn landing_cut() {");
     assert!(lc.contains("if LANDING_SET.swap(false, Ordering::AcqRel) {"));
@@ -396,4 +398,30 @@ fn the_landing_frame_flag_is_scoped() {
     let ls = body(LCD, "pub fn landing_step() {");
     let g = at(ls, "let _frame = LandingFrame::enter();");
     assert!(g < at(ls, "anim.step(now);") && at(ls, "film_reap(true);") < at(ls, "LANDING_LAST_MS.store("));
+}
+
+/// Review M1, second half: PendSV draws only while no gateway call is in
+/// progress, and the non-secure world decides that. Back-to-back short calls
+/// that keep the gate held would freeze the landing mid-orbit (it looks like
+/// signing in progress while the companion already has the signature). So
+/// every veneer, through `fi_boundary`, first draws a due landing frame in
+/// thread mode under its own gate, before its command runs and before its
+/// FI-delay accounting starts; the step's own gap check keeps that to one
+/// frame per gap.
+#[test]
+fn back_to_back_gateway_calls_cannot_freeze_the_landing() {
+    const NSC: &str = include_str!("../nsc/mod.rs");
+    let fb = body(NSC, "fn fi_boundary(run: impl FnOnce() -> u32) -> u32 {");
+    let tick = at(fb, "crate::ui::px::lcd::landing_gateway_tick();");
+    assert!(tick < at(fb, "crate::fi::clear_delay_poison();") && tick < at(fb, "let status = run();"));
+    assert!(fb.contains("#[cfg(all(feature = \"ui-px\", feature = \"ui-lcd\", not(feature = \"ui-px-landing-blocking\")))]\n    crate::ui::px::lcd::landing_gateway_tick();"));
+    let gt = body(LCD, "pub fn landing_gateway_tick() {");
+    let due = at(gt, "if !landing_due(timeout::now()) {\n        return;\n    }");
+    let locked = at(gt, "if crate::nsc::is_definitely_locked() {\n        landing_cut();\n        return;\n    }");
+    assert!(due < locked && locked < at(gt, "landing_step();"));
+    // Not inlined into all the veneers it is called from.
+    assert!(LCD.contains("#[inline(never)]\npub fn landing_gateway_tick() {"));
+    // ANTI-VACUITY: the step it calls keeps its own gap check first.
+    let ls = body(LCD, "pub fn landing_step() {");
+    assert!(at(ls, "if !landing_due(timeout::now()) {\n        return;\n    }") < at(ls, "anim.step(now);"));
 }

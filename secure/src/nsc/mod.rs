@@ -2285,6 +2285,9 @@ unsafe fn dispatch(cmd: u32, args: &GatewayArgs) -> u32 {
 #[cfg(feature = "stm32u585")]
 #[inline(always)]
 fn fi_boundary(run: impl FnOnce() -> u32) -> u32 {
+    // #1154: a due landing frame first.
+    #[cfg(all(feature = "ui-px", feature = "ui-lcd", not(feature = "ui-px-landing-blocking")))]
+    crate::ui::px::lcd::landing_gateway_tick();
     crate::fi::clear_delay_poison();
     let status = run();
     // Every gateway command ends here, LOCK included: zero the stack the

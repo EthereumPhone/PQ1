@@ -295,7 +295,10 @@ note for those pages is proposed upstream (see `tools/pq-ui/UPSTREAM.txt`).
 **UPDATE 2026-11-16 (#1154).** The Signed film no longer holds the sign call.
 The handler returns the released signature at once, and the rest of the
 landing (spiral, flash, check, `RESULT_HOLD_MS`) is drawn afterwards, one
-frame at a time from PendSV while no gateway call is in progress. The
+frame at a time: from PendSV while no gateway call is in progress, or at the
+entry of the next gateway call (`nsc::fi_boundary` ->
+`lcd::landing_gateway_tick`), so back-to-back short calls cannot freeze it
+mid-orbit. The
 **input-dead** row above still holds for it, because nothing else can take
 the glass while the landing is live (review M1). Every input dialog
 (`run_flow`, `run_pager`, `lcd::EntryInput`) and every other draw first plays
