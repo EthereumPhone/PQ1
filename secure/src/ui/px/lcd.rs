@@ -2365,10 +2365,11 @@ pub fn film_resolve(e: Ending) {
     // `show_ending`, still lands before returning.
     #[cfg(not(feature = "ui-px-landing-blocking"))]
     if matches!(e, Ending::Signed) && !hold {
-        IN_LANDING_STEP.store(true, Ordering::Relaxed);
-        anim.step(now);
-        let _ = present_film(&anim, &marks, &font, true);
-        IN_LANDING_STEP.store(false, Ordering::Relaxed);
+        {
+            let _frame = LandingFrame::enter();
+            anim.step(now);
+            let _ = present_film(&anim, &marks, &font, true);
+        }
         // The landing keeps its own screen; the next film starts from the
         // default look, as after a blocking landing.
         reset_film_look();
@@ -2439,9 +2440,33 @@ pub fn film_live() -> bool {
 /// The landing film in `FILM` is live.
 #[cfg(not(feature = "ui-px-landing-blocking"))]
 static LANDING_SET: AtomicBool = AtomicBool::new(false);
-/// A landing frame is being drawn (its own draws are not a cut).
+/// A landing frame is being drawn (its own draws are not a cut). Set and
+/// cleared ONLY by [`LandingFrame`].
 #[cfg(not(feature = "ui-px-landing-blocking"))]
 static IN_LANDING_STEP: AtomicBool = AtomicBool::new(false);
+
+/// [`IN_LANDING_STEP`] for the frames drawn inside one scope: set on entry,
+/// cleared by `Drop` on every exit (review L4). The flag turns off every
+/// other draw's cut, so a stuck `true` would let a landing outlive a later
+/// dialog and paint its stale SIGNED afterwards; positional stores after
+/// the frame were one early return away from that.
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+struct LandingFrame;
+
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+impl LandingFrame {
+    fn enter() -> Self {
+        IN_LANDING_STEP.store(true, Ordering::Relaxed);
+        LandingFrame
+    }
+}
+
+#[cfg(not(feature = "ui-px-landing-blocking"))]
+impl Drop for LandingFrame {
+    fn drop(&mut self) {
+        IN_LANDING_STEP.store(false, Ordering::Relaxed);
+    }
+}
 /// When the previous landing frame ended (ms).
 #[cfg(not(feature = "ui-px-landing-blocking"))]
 static LANDING_LAST_MS: AtomicU32 = AtomicU32::new(0);
@@ -2501,17 +2526,19 @@ pub fn landing_step() {
     // threaded driver state (PendSV with no gateway call is the only caller,
     // and nothing else reads `FILM` while `FILM_SET` is false).
     let anim = unsafe { &mut (*core::ptr::addr_of_mut!(FILM)).assume_init_mut().0 };
-    IN_LANDING_STEP.store(true, Ordering::Relaxed);
-    anim.step(now);
-    let done = anim.film_done(now);
-    if done {
-        // The resting frame, in full: what stays on the glass.
-        let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None, None, None);
-    } else {
-        let _ = present_film(anim, &atlas.marks(), &atlas.font(), false);
-    }
-    film_reap(true);
-    IN_LANDING_STEP.store(false, Ordering::Relaxed);
+    let done = {
+        let _frame = LandingFrame::enter();
+        anim.step(now);
+        let done = anim.film_done(now);
+        if done {
+            // The resting frame, in full: what stays on the glass.
+            let _ = build_and_present(anim, &atlas.marks(), &atlas.font(), None, None, None);
+        } else {
+            let _ = present_film(anim, &atlas.marks(), &atlas.font(), false);
+        }
+        film_reap(true);
+        done
+    };
     LANDING_LAST_MS.store(timeout::now(), Ordering::Relaxed);
     if done {
         LANDING_SET.store(false, Ordering::Release);

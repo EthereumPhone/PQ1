@@ -318,3 +318,24 @@ fn a_non_idle_lock_during_a_landing_opens_no_pin_dialog() {
     const LOCK: &str = include_str!("../nsc/cmd_lock.rs");
     assert!(at(LOCK, "super::zeroize_sensitive_state();") < at(LOCK, "crate::ui::show_status(\"Locked\", \"\");"));
 }
+
+/// `IN_LANDING_STEP` turns off every other draw's cut, so it is set and
+/// cleared only by the `LandingFrame` guard (review L4): a positional
+/// `store(false)` after a frame was one early return away from a stuck flag,
+/// and a stuck flag let a landing outlive a later dialog and paint its stale
+/// SIGNED over that dialog's own ending.
+#[test]
+fn the_landing_frame_flag_is_scoped() {
+    assert_eq!(LCD.matches("IN_LANDING_STEP.store(true, Ordering::Relaxed);").count(), 1);
+    assert_eq!(LCD.matches("IN_LANDING_STEP.store(false, Ordering::Relaxed);").count(), 1);
+    let enter = body(LCD, "    fn enter() -> Self {\n        IN_LANDING_STEP.store(true, Ordering::Relaxed);");
+    assert!(enter.contains("LandingFrame"));
+    let drop = at(LCD, "impl Drop for LandingFrame {\n    fn drop(&mut self) {\n        IN_LANDING_STEP.store(false, Ordering::Relaxed);\n    }\n}");
+    assert!(drop > 0);
+    // Both frame sites take the guard around their draw.
+    let fr = body(LCD, "pub fn film_resolve(e: Ending) {");
+    assert!(at(fr, "let _frame = LandingFrame::enter();") < at(fr, "let _ = present_film(&anim, &marks, &font, true);"));
+    let ls = body(LCD, "pub fn landing_step() {");
+    let g = at(ls, "let _frame = LandingFrame::enter();");
+    assert!(g < at(ls, "anim.step(now);") && at(ls, "film_reap(true);") < at(ls, "LANDING_LAST_MS.store("));
+}
