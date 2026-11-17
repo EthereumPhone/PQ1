@@ -5114,7 +5114,11 @@ miri: ## Miri UB check on host crates
 	@# Filter `display` matches every module containing the crate's 10 unsafe blocks;
 	@# the rest is safe code. Full-crate Miri is ~8.5 min — filtered leg is ~4 min.
 	@# ignore-leaks: test fixtures use Box::leak for &'static [u8] IR pools (intentional).
-	MIRIFLAGS="-Zmiri-ignore-leaks" cargo +nightly miri test -p pqsigner-erc7730 --lib -- display
+	@# --skip amount_form_policy_tests (#1170): the two amount corpus tests in
+	@# display/primitives.rs check >200,000 cases and take hours under Miri, which ran
+	@# the job into its 6 h timeout and left every later leg unrun. primitives.rs holds
+	@# no unsafe; the host test job still runs both tests in full.
+	MIRIFLAGS="-Zmiri-ignore-leaks" cargo +nightly miri test -p pqsigner-erc7730 --lib -- display --skip amount_form_policy_tests
 	@echo "==> Miri: secure-world NS-pointer deref + validation (the genuine host-reachable unsafe)"
 	@# permissive-provenance: the NS-ptr boundary is a legitimate int->ptr cast.
 	MIRIFLAGS="-Zmiri-permissive-provenance" cargo +nightly miri test -p sphincs-tz-secure --no-default-features --features mock-se,debug-log,ui-semihosting -- ns_ptr ptr_validate

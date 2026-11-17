@@ -539,6 +539,10 @@ jobs:
   miri:
     name: Miri (UB in host-reachable unsafe)
     runs-on: ubuntu-latest
+    # The job normally takes 11-16 min. A test that is slow under Miri
+    # previously ran it to the 6 h default and left the later legs unrun
+    # without failing the job (#1170).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
